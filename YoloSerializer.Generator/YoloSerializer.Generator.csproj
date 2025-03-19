@@ -8,6 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Scriban" Version="6.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\YoloSerializer.Tests\YoloSerializer.Tests.csproj" />
   </ItemGroup>
 

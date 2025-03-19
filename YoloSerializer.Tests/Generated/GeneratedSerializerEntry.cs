@@ -1,22 +1,13 @@
 using System;
 using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
+using YoloSerializer.Core;
+using YoloSerializer.Core.Contracts;
 using YoloSerializer.Core.Models;
 using YoloSerializer.Core.Serializers;
 
-namespace YoloSerializer.Core
+namespace YoloSerializer.Core.Serializers
 {
-    /// <summary>
-    /// Marker interface for serializable types
-    /// </summary>
-    public interface IYoloSerializable
-    {
-        /// <summary>
-        /// Type ID for serialization (must be unique per type)
-        /// </summary>
-        byte TypeId { get; }
-    }
-    
     /// <summary>
     /// High-performance serializer using pattern matching for optimal dispatch
     /// </summary>
@@ -29,30 +20,30 @@ namespace YoloSerializer.Core
         /// </summary>
         public static GeneratedSerializerEntry Instance => _instance;
         
-        private GeneratedSerializerEntry() { }
-        
-        /// <summary>
-        /// Type ID reserved for null values
-        /// </summary>
-        public const byte NULL_TYPE_ID = 0;
+        private GeneratedSerializerEntry() 
+        {
+            // Register the types we know about
+            TypeRegistry.RegisterType<PlayerData>();
+            TypeRegistry.RegisterType<Position>();
+        }
         
         /// <summary>
         /// Serializes an object to a byte span
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Serialize<T>(T? obj, Span<byte> buffer, ref int offset) where T : class, IYoloSerializable
+        public void Serialize<T>(T? obj, Span<byte> buffer, ref int offset) where T : IYoloSerializable
         {
             // Handle null case
             if (obj == null)
             {
                 EnsureBufferSize(buffer, offset, sizeof(byte));
-                buffer[offset++] = NULL_TYPE_ID;
+                buffer[offset++] = TypeRegistry.NULL_TYPE_ID;
                 return;
             }
             
-            // Write type ID from the interface
+            // Write type ID from the registry
             EnsureBufferSize(buffer, offset, sizeof(byte));
-            buffer[offset++] = obj.TypeId;
+            buffer[offset++] = TypeRegistry.GetTypeId<T>();
             
             // Type-based dispatch using pattern matching
             if (obj is PlayerData playerData)
@@ -69,17 +60,17 @@ namespace YoloSerializer.Core
         /// Serializes an object to a byte span with pre-computed size
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void SerializeWithoutSizeCheck<T>(T? obj, Span<byte> buffer, ref int offset) where T : class, IYoloSerializable
+        public void SerializeWithoutSizeCheck<T>(T? obj, Span<byte> buffer, ref int offset) where T : IYoloSerializable
         {
             // Handle null case
             if (obj == null)
             {
-                buffer[offset++] = NULL_TYPE_ID;
+                buffer[offset++] = TypeRegistry.NULL_TYPE_ID;
                 return;
             }
             
-            // Write type ID from the interface
-            buffer[offset++] = obj.TypeId;
+            // Write type ID from the registry
+            buffer[offset++] = TypeRegistry.GetTypeId<T>();
             
             // Type-based dispatch using pattern matching
             if (obj is PlayerData playerData)
@@ -105,14 +96,15 @@ namespace YoloSerializer.Core
             byte typeId = buffer[offset++];
             
             // Check for null
-            if (typeId == NULL_TYPE_ID)
+            if (typeId == TypeRegistry.NULL_TYPE_ID)
                 return null;
                 
             // Type-based dispatch using type ID
             return typeId switch
             {
                 #region codegen
-                PlayerData.TYPE_ID => DeserializePlayerData(buffer, ref offset),
+                _ when typeId == TypeRegistry.GetTypeId<PlayerData>() => DeserializePlayerData(buffer, ref offset),
+                _ when typeId == TypeRegistry.GetTypeId<Position>() => DeserializePosition(buffer, ref offset),
                 _ => throw new InvalidOperationException($"Unknown type ID: {typeId}")
                 #endregion
             };
@@ -129,6 +121,16 @@ namespace YoloSerializer.Core
         }
         
         /// <summary>
+        /// Helper method to deserialize Position
+        /// </summary>
+        private Position DeserializePosition(ReadOnlySpan<byte> buffer, ref int offset)
+        {
+            Position result;
+            PositionSerializer.Instance.Deserialize(out result, buffer, ref offset);
+            return result;
+        }
+        
+        /// <summary>
         /// Deserializes an object from a byte span with strong typing
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -141,17 +143,24 @@ namespace YoloSerializer.Core
             byte typeId = buffer[offset++];
             
             // Check for null
-            if (typeId == NULL_TYPE_ID)
+            if (typeId == TypeRegistry.NULL_TYPE_ID)
                 return null;
 
             #region codegen
             // Type safety checks for strongly-typed deserialization
             if (typeof(T) == typeof(PlayerData))
             {
-                if (typeId != PlayerData.TYPE_ID)
+                if (typeId != TypeRegistry.GetTypeId<PlayerData>())
                     throw new InvalidCastException($"Cannot deserialize type ID {typeId} as PlayerData");
                     
                 return (T)(object)DeserializePlayerData(buffer, ref offset);
+            }
+            else if (typeof(T) == typeof(Position))
+            {
+                if (typeId != TypeRegistry.GetTypeId<Position>())
+                    throw new InvalidCastException($"Cannot deserialize type ID {typeId} as Position");
+                    
+                return (T)(object)DeserializePosition(buffer, ref offset);
             }
             #endregion
 
@@ -163,7 +172,7 @@ namespace YoloSerializer.Core
         /// Gets the serialized size of an object
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int GetSerializedSize<T>(T? obj) where T : class, IYoloSerializable
+        public int GetSerializedSize<T>(T? obj) where T : IYoloSerializable
         {
             // Handle null case
             if (obj == null)
@@ -174,6 +183,10 @@ namespace YoloSerializer.Core
             if (obj is PlayerData playerData)
             {
                 return sizeof(byte) + PlayerDataSerializer.Instance.GetSize(playerData);
+            }
+            else if (obj is Position position)
+            {
+                return sizeof(byte) + PositionSerializer.Instance.GetSize(position);
             }
             #endregion
 

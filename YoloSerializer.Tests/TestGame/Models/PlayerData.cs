@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using YoloSerializer.Core.Contracts;
 
 namespace YoloSerializer.Core.Models
 {
