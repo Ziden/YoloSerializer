@@ -7,9 +7,7 @@ namespace YoloSerializer.Core.Contracts
     /// </summary>
     public interface IYoloSerializable
     {
-        /// <summary>
-        /// Type ID for serialization (must be unique per type)
-        /// </summary>
-        byte TypeId { get; }
+        // This is now just a marker interface - 
+        // Type IDs are managed by the TypeRegistry
     }
 } 

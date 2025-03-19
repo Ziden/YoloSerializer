@@ -10,15 +10,7 @@ namespace YoloSerializer.Core.Models
     /// </summary>
     public class PlayerData : IYoloSerializable
     {
-        /// <summary>
-        /// Type ID for serialization
-        /// </summary>
-        public const byte TYPE_ID = 1;
-
-        /// <summary>
-        /// Gets the type ID for serialization
-        /// </summary>
-        public byte TypeId => TYPE_ID;
+        // Type ID is now managed by TypeRegistry
 
         public int PlayerId { get; set; }
         public string? PlayerName { get; set; }

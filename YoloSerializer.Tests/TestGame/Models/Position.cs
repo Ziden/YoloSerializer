@@ -8,16 +8,6 @@ namespace YoloSerializer.Core.Models
     /// </summary>
     public class Position : IYoloSerializable
     {
-        /// <summary>
-        /// Type ID for serialization
-        /// </summary>
-        public const byte TYPE_ID = 2;
-
-        /// <summary>
-        /// Gets the type ID for serialization
-        /// </summary>
-        public byte TypeId => TYPE_ID;
-
         public float X { get; set; }
         public float Y { get; set; }
         public float Z { get; set; }

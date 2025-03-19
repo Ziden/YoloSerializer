@@ -37,7 +37,7 @@ namespace YoloSerializer.Tests
             );
             
             // Calculate required buffer size
-            var serializer = GeneratedSerializerEntry.Instance;
+            var serializer = YoloGeneratedSerializer.Instance;
             int size = serializer.GetSerializedSize(original);
             var buffer = new byte[size];
             int offset = 0;
@@ -74,7 +74,7 @@ namespace YoloSerializer.Tests
             
             // Arrange
             PlayerData? original = null;
-            var serializer = GeneratedSerializerEntry.Instance;
+            var serializer = YoloGeneratedSerializer.Instance;
             var buffer = new byte[sizeof(byte)]; // Just enough for type ID marker
             int offset = 0;
 
@@ -109,7 +109,7 @@ namespace YoloSerializer.Tests
             
             // Act - Calculate the size using both methods
             var playerSerializer = PlayerDataSerializer.Instance;
-            var entrySerializer = GeneratedSerializerEntry.Instance;
+            var entrySerializer = YoloGeneratedSerializer.Instance;
             
             int directSize = playerSerializer.GetSize(player) + sizeof(byte); // Add byte for type ID
             int yoloSize = entrySerializer.GetSerializedSize(player);
@@ -139,7 +139,7 @@ namespace YoloSerializer.Tests
             
             // Pre-allocate buffers
             var playerSerializer = PlayerDataSerializer.Instance;
-            var entrySerializer = GeneratedSerializerEntry.Instance;
+            var entrySerializer = YoloGeneratedSerializer.Instance;
             
             int directSize = playerSerializer.GetSize(player);
             int patternSize = entrySerializer.GetSerializedSize(player);
@@ -229,7 +229,7 @@ namespace YoloSerializer.Tests
             original.Stats["Assists"] = 75;
             
             // Calculate required buffer size
-            var serializer = GeneratedSerializerEntry.Instance;
+            var serializer = YoloGeneratedSerializer.Instance;
             int size = serializer.GetSerializedSize(original);
             var buffer = new byte[size];
             int offset = 0;

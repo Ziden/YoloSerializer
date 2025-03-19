@@ -11,11 +11,6 @@ namespace YoloSerializer.Core
     public static class YoloSerializer
     {
         /// <summary>
-        /// Type ID reserved for null values
-        /// </summary>
-        public const byte NULL_TYPE_ID = 0;
-        
-        /// <summary>
         /// Serializes an object to a byte span
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -25,13 +20,13 @@ namespace YoloSerializer.Core
             if (obj == null)
             {
                 EnsureBufferSize(buffer, offset, sizeof(byte));
-                buffer[offset++] = NULL_TYPE_ID;
+                buffer[offset++] = TypeRegistry.NULL_TYPE_ID;
                 return;
             }
             
-            // Write type ID from the interface
+            // Write type ID from the TypeRegistry
             EnsureBufferSize(buffer, offset, sizeof(byte));
-            buffer[offset++] = obj.TypeId;
+            buffer[offset++] = TypeRegistry.GetTypeId<T>();
             
             // Dispatch to the appropriate serializer
             SerializeObject(obj, buffer, ref offset);
@@ -61,7 +56,7 @@ namespace YoloSerializer.Core
             byte typeId = buffer[offset++];
             
             // Check for null
-            if (typeId == NULL_TYPE_ID)
+            if (typeId == TypeRegistry.NULL_TYPE_ID)
                 return null;
                 
             // Dispatch to appropriate deserializer based on type ID
@@ -92,7 +87,7 @@ namespace YoloSerializer.Core
             byte typeId = buffer[offset++];
             
             // Check for null
-            if (typeId == NULL_TYPE_ID)
+            if (typeId == TypeRegistry.NULL_TYPE_ID)
                 return null;
                 
             // Deserialize object
