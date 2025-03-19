@@ -40,7 +40,10 @@ namespace YoloSerializer.Generator
         static async Task Main(string[] args)
         {
             // Default parameters
-var targetAssembly = typeof(PlayerData).Assembly; // initial example
+            var targetAssembly = typeof(PlayerData).Assembly; // initial example
+
+            // Make sure AllTypesData is included
+            var allTypesDataType = typeof(AllTypesData);
             
             // Use a relative path that works regardless of where the executable is located
             var solutionDir = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", ".."));
@@ -512,6 +515,91 @@ var targetAssembly = typeof(PlayerData).Assembly; // initial example
                 propertyInfo.DeserializeCode = $"StringSerializer.Instance.Deserialize(out string? {localVarName}, buffer, ref offset);\n" +
                                                $"            {instancePropRef} = {localVarName};";
             }
+            // New primitive types
+            else if (unwrappedType == typeof(byte))
+            {
+                propertyInfo.SizeCalculation = $"ByteSerializer.Instance.GetSize({instancePropRef})";
+                propertyInfo.SerializeCode = $"ByteSerializer.Instance.Serialize({instancePropRef}, buffer, ref offset);";
+                propertyInfo.DeserializeCode = $"ByteSerializer.Instance.Deserialize(out byte {localVarName}, buffer, ref offset);\n" +
+                                               $"            {instancePropRef} = {localVarName};";
+            }
+            else if (unwrappedType == typeof(sbyte))
+            {
+                propertyInfo.SizeCalculation = $"SByteSerializer.Instance.GetSize({instancePropRef})";
+                propertyInfo.SerializeCode = $"SByteSerializer.Instance.Serialize({instancePropRef}, buffer, ref offset);";
+                propertyInfo.DeserializeCode = $"SByteSerializer.Instance.Deserialize(out sbyte {localVarName}, buffer, ref offset);\n" +
+                                               $"            {instancePropRef} = {localVarName};";
+            }
+            else if (unwrappedType == typeof(char))
+            {
+                propertyInfo.SizeCalculation = $"CharSerializer.Instance.GetSize({instancePropRef})";
+                propertyInfo.SerializeCode = $"CharSerializer.Instance.Serialize({instancePropRef}, buffer, ref offset);";
+                propertyInfo.DeserializeCode = $"CharSerializer.Instance.Deserialize(out char {localVarName}, buffer, ref offset);\n" +
+                                               $"            {instancePropRef} = {localVarName};";
+            }
+            else if (unwrappedType == typeof(short))
+            {
+                propertyInfo.SizeCalculation = $"Int16Serializer.Instance.GetSize({instancePropRef})";
+                propertyInfo.SerializeCode = $"Int16Serializer.Instance.Serialize({instancePropRef}, buffer, ref offset);";
+                propertyInfo.DeserializeCode = $"Int16Serializer.Instance.Deserialize(out short {localVarName}, buffer, ref offset);\n" +
+                                               $"            {instancePropRef} = {localVarName};";
+            }
+            else if (unwrappedType == typeof(ushort))
+            {
+                propertyInfo.SizeCalculation = $"UInt16Serializer.Instance.GetSize({instancePropRef})";
+                propertyInfo.SerializeCode = $"UInt16Serializer.Instance.Serialize({instancePropRef}, buffer, ref offset);";
+                propertyInfo.DeserializeCode = $"UInt16Serializer.Instance.Deserialize(out ushort {localVarName}, buffer, ref offset);\n" +
+                                               $"            {instancePropRef} = {localVarName};";
+            }
+            else if (unwrappedType == typeof(uint))
+            {
+                propertyInfo.SizeCalculation = $"UInt32Serializer.Instance.GetSize({instancePropRef})";
+                propertyInfo.SerializeCode = $"UInt32Serializer.Instance.Serialize({instancePropRef}, buffer, ref offset);";
+                propertyInfo.DeserializeCode = $"UInt32Serializer.Instance.Deserialize(out uint {localVarName}, buffer, ref offset);\n" +
+                                               $"            {instancePropRef} = {localVarName};";
+            }
+            else if (unwrappedType == typeof(ulong))
+            {
+                propertyInfo.SizeCalculation = $"UInt64Serializer.Instance.GetSize({instancePropRef})";
+                propertyInfo.SerializeCode = $"UInt64Serializer.Instance.Serialize({instancePropRef}, buffer, ref offset);";
+                propertyInfo.DeserializeCode = $"UInt64Serializer.Instance.Deserialize(out ulong {localVarName}, buffer, ref offset);\n" +
+                                               $"            {instancePropRef} = {localVarName};";
+            }
+            else if (unwrappedType == typeof(decimal))
+            {
+                propertyInfo.SizeCalculation = $"DecimalSerializer.Instance.GetSize({instancePropRef})";
+                propertyInfo.SerializeCode = $"DecimalSerializer.Instance.Serialize({instancePropRef}, buffer, ref offset);";
+                propertyInfo.DeserializeCode = $"DecimalSerializer.Instance.Deserialize(out decimal {localVarName}, buffer, ref offset);\n" +
+                                               $"            {instancePropRef} = {localVarName};";
+            }
+            else if (unwrappedType == typeof(DateTime))
+            {
+                propertyInfo.SizeCalculation = $"DateTimeSerializer.Instance.GetSize({instancePropRef})";
+                propertyInfo.SerializeCode = $"DateTimeSerializer.Instance.Serialize({instancePropRef}, buffer, ref offset);";
+                propertyInfo.DeserializeCode = $"DateTimeSerializer.Instance.Deserialize(out DateTime {localVarName}, buffer, ref offset);\n" +
+                                               $"            {instancePropRef} = {localVarName};";
+            }
+            else if (unwrappedType == typeof(TimeSpan))
+            {
+                propertyInfo.SizeCalculation = $"TimeSpanSerializer.Instance.GetSize({instancePropRef})";
+                propertyInfo.SerializeCode = $"TimeSpanSerializer.Instance.Serialize({instancePropRef}, buffer, ref offset);";
+                propertyInfo.DeserializeCode = $"TimeSpanSerializer.Instance.Deserialize(out TimeSpan {localVarName}, buffer, ref offset);\n" +
+                                               $"            {instancePropRef} = {localVarName};";
+            }
+            else if (unwrappedType == typeof(Guid))
+            {
+                propertyInfo.SizeCalculation = $"GuidSerializer.Instance.GetSize({instancePropRef})";
+                propertyInfo.SerializeCode = $"GuidSerializer.Instance.Serialize({instancePropRef}, buffer, ref offset);";
+                propertyInfo.DeserializeCode = $"GuidSerializer.Instance.Deserialize(out Guid {localVarName}, buffer, ref offset);\n" +
+                                               $"            {instancePropRef} = {localVarName};";
+            }
+            else if (unwrappedType.IsEnum)
+            {
+                propertyInfo.SizeCalculation = $"EnumSerializer<{GetFullTypeName(unwrappedType)}>.Instance.GetSize({instancePropRef})";
+                propertyInfo.SerializeCode = $"EnumSerializer<{GetFullTypeName(unwrappedType)}>.Instance.Serialize({instancePropRef}, buffer, ref offset);";
+                propertyInfo.DeserializeCode = $"EnumSerializer<{GetFullTypeName(unwrappedType)}>.Instance.Deserialize(out {GetFullTypeName(unwrappedType)} {localVarName}, buffer, ref offset);\n" +
+                                               $"            {instancePropRef} = {localVarName};";
+            }
             // Handle custom serializable types
             else if (propertyInfo.IsYoloSerializable)
             {
@@ -644,6 +732,22 @@ var targetAssembly = typeof(PlayerData).Assembly; // initial example
             if (unwrappedType == typeof(bool)) return "BooleanSerializer";
             if (unwrappedType == typeof(string)) return "StringSerializer";
             
+            // New primitive types
+            if (unwrappedType == typeof(byte)) return "ByteSerializer";
+            if (unwrappedType == typeof(sbyte)) return "SByteSerializer";
+            if (unwrappedType == typeof(char)) return "CharSerializer";
+            if (unwrappedType == typeof(short)) return "Int16Serializer";
+            if (unwrappedType == typeof(ushort)) return "UInt16Serializer";
+            if (unwrappedType == typeof(uint)) return "UInt32Serializer";
+            if (unwrappedType == typeof(ulong)) return "UInt64Serializer";
+            if (unwrappedType == typeof(decimal)) return "DecimalSerializer";
+            if (unwrappedType == typeof(DateTime)) return "DateTimeSerializer";
+            if (unwrappedType == typeof(TimeSpan)) return "TimeSpanSerializer";
+            if (unwrappedType == typeof(Guid)) return "GuidSerializer";
+            
+            // For enums
+            if (unwrappedType.IsEnum) return $"EnumSerializer<{GetFullTypeName(unwrappedType)}>";
+            
             // For custom IYoloSerializable types
             if (typeof(IYoloSerializable).IsAssignableFrom(unwrappedType))
             {
@@ -661,6 +765,19 @@ var targetAssembly = typeof(PlayerData).Assembly; // initial example
             if (type == typeof(long)) return "long";
             if (type == typeof(bool)) return "bool";
             if (type == typeof(string)) return "string";
+            
+            // New primitive types
+            if (type == typeof(byte)) return "byte";
+            if (type == typeof(sbyte)) return "sbyte";
+            if (type == typeof(char)) return "char";
+            if (type == typeof(short)) return "short";
+            if (type == typeof(ushort)) return "ushort";
+            if (type == typeof(uint)) return "uint";
+            if (type == typeof(ulong)) return "ulong";
+            if (type == typeof(decimal)) return "decimal";
+            if (type == typeof(DateTime)) return "DateTime";
+            if (type == typeof(TimeSpan)) return "TimeSpan";
+            if (type == typeof(Guid)) return "Guid";
             
             Type? nullableUnderlyingType = Nullable.GetUnderlyingType(type);
             if (nullableUnderlyingType != null)

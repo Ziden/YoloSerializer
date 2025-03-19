@@ -61,5 +61,77 @@ namespace YoloSerializer.Core
                 offset += sizeof(char);
             }
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void WriteChar(this Span<byte> span, ref int offset, char value)
+        {
+            BinaryPrimitives.WriteUInt16LittleEndian(span.Slice(offset, sizeof(char)), value);
+            offset += sizeof(char);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void WriteInt16(this Span<byte> span, ref int offset, short value)
+        {
+            BinaryPrimitives.WriteInt16LittleEndian(span.Slice(offset, sizeof(short)), value);
+            offset += sizeof(short);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void WriteUInt16(this Span<byte> span, ref int offset, ushort value)
+        {
+            BinaryPrimitives.WriteUInt16LittleEndian(span.Slice(offset, sizeof(ushort)), value);
+            offset += sizeof(ushort);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void WriteUInt32(this Span<byte> span, ref int offset, uint value)
+        {
+            BinaryPrimitives.WriteUInt32LittleEndian(span.Slice(offset, sizeof(uint)), value);
+            offset += sizeof(uint);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void WriteUInt64(this Span<byte> span, ref int offset, ulong value)
+        {
+            BinaryPrimitives.WriteUInt64LittleEndian(span.Slice(offset, sizeof(ulong)), value);
+            offset += sizeof(ulong);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void WriteDecimal(this Span<byte> span, ref int offset, decimal value)
+        {
+            var bits = decimal.GetBits(value);
+            for (int i = 0; i < bits.Length; i++)
+            {
+                BinaryPrimitives.WriteInt32LittleEndian(span.Slice(offset, sizeof(int)), bits[i]);
+                offset += sizeof(int);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void WriteDateTime(this Span<byte> span, ref int offset, DateTime value)
+        {
+            span.WriteInt64(ref offset, value.Ticks);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void WriteTimeSpan(this Span<byte> span, ref int offset, TimeSpan value)
+        {
+            span.WriteInt64(ref offset, value.Ticks);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void WriteGuid(this Span<byte> span, ref int offset, Guid value)
+        {
+            value.TryWriteBytes(span.Slice(offset, 16));
+            offset += 16;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void WriteEnum<TEnum>(this Span<byte> span, ref int offset, TEnum value) 
+            where TEnum : struct, Enum
+        {
+            span.WriteInt32(ref offset, Convert.ToInt32(value));
+        }
     }
 } 

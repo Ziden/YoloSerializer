@@ -30,14 +30,19 @@ namespace YoloSerializer.Tests.Generated
 
         #region codegen
         /// <summary>
+        /// Type ID for AllTypesData
+        /// </summary>
+        public const byte ALLTYPESDATA_TYPE_ID = 1;
+        
+        /// <summary>
         /// Type ID for PlayerData
         /// </summary>
-        public const byte PLAYERDATA_TYPE_ID = 1;
+        public const byte PLAYERDATA_TYPE_ID = 2;
         
         /// <summary>
         /// Type ID for Position
         /// </summary>
-        public const byte POSITION_TYPE_ID = 2;
+        public const byte POSITION_TYPE_ID = 3;
         
         #endregion
         
@@ -55,6 +60,9 @@ namespace YoloSerializer.Tests.Generated
             Type type = typeof(T);
 
             #region codegen
+            if (type == typeof(AllTypesData))
+                return ALLTYPESDATA_TYPE_ID;
+                
             if (type == typeof(PlayerData))
                 return PLAYERDATA_TYPE_ID;
                 
@@ -73,6 +81,10 @@ namespace YoloSerializer.Tests.Generated
         {
             switch (obj)
             {
+                case AllTypesData allTypesData:
+                    AllTypesDataSerializer.Instance.Serialize(allTypesData, buffer, ref offset);
+                    break;
+                
                 case PlayerData playerData:
                     PlayerDataSerializer.Instance.Serialize(playerData, buffer, ref offset);
                     break;
@@ -94,6 +106,9 @@ namespace YoloSerializer.Tests.Generated
         {
             switch (obj)
             {
+                case AllTypesData allTypesData:
+                    return AllTypesDataSerializer.Instance.GetSize(allTypesData);
+                
                 case PlayerData playerData:
                     return PlayerDataSerializer.Instance.GetSize(playerData);
                 
@@ -113,6 +128,11 @@ namespace YoloSerializer.Tests.Generated
         {
             switch (typeId)
             {
+                case ALLTYPESDATA_TYPE_ID:
+                    AllTypesData? allTypesDataResult;
+                    AllTypesDataSerializer.Instance.Deserialize(out allTypesDataResult, buffer, ref offset);
+                    return allTypesDataResult;
+                
                 case PLAYERDATA_TYPE_ID:
                     PlayerData? playerDataResult;
                     PlayerDataSerializer.Instance.Deserialize(out playerDataResult, buffer, ref offset);
