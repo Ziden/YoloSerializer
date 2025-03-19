@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Xunit;
 using Xunit.Abstractions;
 using YoloSerializer.Core.Models;
@@ -25,6 +26,10 @@ namespace YoloSerializer.Tests
                 Health = 100,
                 IsActive = true
             };
+            // Add same achievements and stats to both
+            player1.Achievements.AddRange(new[] { "Achievement1", "Achievement2" });
+            player1.Stats["Stat1"] = 10;
+            player1.Stats["Stat2"] = 20;
             
             var player2 = new PlayerData { 
                 PlayerId = 1, 
@@ -33,12 +38,21 @@ namespace YoloSerializer.Tests
                 Health = 100,
                 IsActive = true
             };
+            // Add same achievements and stats to both
+            player2.Achievements.AddRange(new[] { "Achievement1", "Achievement2" });
+            player2.Stats["Stat1"] = 10;
+            player2.Stats["Stat2"] = 20;
             
             // Output values for debugging
             _output.WriteLine($"Player1: ID={player1.PlayerId}, Name={player1.PlayerName}, Health={player1.Health}, IsActive={player1.IsActive}");
             _output.WriteLine($"Player1.Position: X={player1.Position.X}, Y={player1.Position.Y}, Z={player1.Position.Z}");
+            _output.WriteLine($"Player1.Achievements: {string.Join(", ", player1.Achievements)}");
+            _output.WriteLine($"Player1.Stats: Count={player1.Stats.Count}");
+            
             _output.WriteLine($"Player2: ID={player2.PlayerId}, Name={player2.PlayerName}, Health={player2.Health}, IsActive={player2.IsActive}");
             _output.WriteLine($"Player2.Position: X={player2.Position.X}, Y={player2.Position.Y}, Z={player2.Position.Z}");
+            _output.WriteLine($"Player2.Achievements: {string.Join(", ", player2.Achievements)}");
+            _output.WriteLine($"Player2.Stats: Count={player2.Stats.Count}");
             
             // Check equality by reference
             bool sameReference = ReferenceEquals(player1, player2);
@@ -58,6 +72,10 @@ namespace YoloSerializer.Tests
                 Health = 100,
                 IsActive = true
             };
+            // Add same achievements and stats
+            player3.Achievements.AddRange(new[] { "Achievement1", "Achievement2" });
+            player3.Stats["Stat1"] = 10;
+            player3.Stats["Stat2"] = 20;
             
             bool differentEqualsResult = player1.Equals(player3);
             _output.WriteLine($"Different objects Equals result: {differentEqualsResult}");

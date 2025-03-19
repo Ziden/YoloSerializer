@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text;
 using Xunit;
 using Xunit.Abstractions;
@@ -176,6 +177,72 @@ namespace YoloSerializer.Tests
             // This test is to measure performance, not pass/fail
             Assert.True(directWatch.ElapsedMilliseconds > 0);
             Assert.True(patternWatch.ElapsedMilliseconds > 0);
+        }
+
+        [Fact]
+        public void YoloSerializer_ShouldSerializeAndDeserializeWithCollections()
+        {
+            // Arrange
+            var original = new PlayerData(
+                playerId: 42,
+                playerName: "TestPlayer",
+                health: 100,
+                position: new Position(1.5f, 2.5f, 3.5f),
+                isActive: true
+            );
+            
+            // Add achievements
+            original.Achievements.Add("First Blood");
+            original.Achievements.Add("Headshot Master");
+            original.Achievements.Add("Survivor");
+            
+            // Add stats
+            original.Stats["Kills"] = 150;
+            original.Stats["Deaths"] = 50;
+            original.Stats["Assists"] = 75;
+            
+            // Calculate required buffer size
+            var serializer = GeneratedSerializerEntry.Instance;
+            int size = serializer.GetSerializedSize(original);
+            var buffer = new byte[size];
+            int offset = 0;
+
+            // Act - serialize
+            serializer.Serialize(original, buffer, ref offset);
+            
+            // Verify offset advancement
+            Assert.Equal(size, offset);
+            
+            // Reset offset for deserialization
+            offset = 0;
+            var result = serializer.Deserialize<PlayerData>(buffer, ref offset);
+
+            // Assert
+            Assert.NotNull(result);
+            
+            // Check basic properties
+            Assert.Equal(original.PlayerId, result!.PlayerId);
+            Assert.Equal(original.PlayerName, result.PlayerName);
+            Assert.Equal(original.Health, result.Health);
+            Assert.Equal(original.Position.X, result.Position.X);
+            Assert.Equal(original.Position.Y, result.Position.Y);
+            Assert.Equal(original.Position.Z, result.Position.Z);
+            Assert.Equal(original.IsActive, result.IsActive);
+            
+            // Check achievements list
+            Assert.Equal(original.Achievements.Count, result.Achievements.Count);
+            for (int i = 0; i < original.Achievements.Count; i++)
+            {
+                Assert.Equal(original.Achievements[i], result.Achievements[i]);
+            }
+            
+            // Check stats dictionary
+            Assert.Equal(original.Stats.Count, result.Stats.Count);
+            foreach (var key in original.Stats.Keys)
+            {
+                Assert.True(result.Stats.ContainsKey(key));
+                Assert.Equal(original.Stats[key], result.Stats[key]);
+            }
         }
     }
 } 

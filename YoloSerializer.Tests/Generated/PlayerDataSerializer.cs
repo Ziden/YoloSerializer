@@ -1,6 +1,7 @@
 using System;
 using System.Buffers;
 using System.Buffers.Binary;
+using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -97,6 +98,21 @@ namespace YoloSerializer.Core.Serializers
             
             // Size of IsActive (bool)
             size += BooleanSerializer.Instance.GetSize(player.IsActive);
+
+            // Size of Achievements list
+            size += Int32Serializer.Instance.GetSize(player.Achievements.Count); // Count
+            foreach (var achievement in player.Achievements)
+            {
+                size += StringSerializer.Instance.GetSize(achievement);
+            }
+            
+            // Size of Stats dictionary
+            size += Int32Serializer.Instance.GetSize(player.Stats.Count); // Count
+            foreach (var kvp in player.Stats)
+            {
+                size += StringSerializer.Instance.GetSize(kvp.Key);
+                size += Int32Serializer.Instance.GetSize(kvp.Value);
+            }
             
             return size;
         }
@@ -125,6 +141,21 @@ namespace YoloSerializer.Core.Serializers
             
             // Serialize IsActive (bool)
             BooleanSerializer.Instance.Serialize(player.IsActive, buffer, ref offset);
+            
+            // Serialize Achievements list
+            Int32Serializer.Instance.Serialize(player.Achievements.Count, buffer, ref offset);
+            foreach (var achievement in player.Achievements)
+            {
+                StringSerializer.Instance.Serialize(achievement, buffer, ref offset);
+            }
+            
+            // Serialize Stats dictionary
+            Int32Serializer.Instance.Serialize(player.Stats.Count, buffer, ref offset);
+            foreach (var kvp in player.Stats)
+            {
+                StringSerializer.Instance.Serialize(kvp.Key, buffer, ref offset);
+                Int32Serializer.Instance.Serialize(kvp.Value, buffer, ref offset);
+            }
         }
 
         /// <summary>
@@ -161,6 +192,25 @@ namespace YoloSerializer.Core.Serializers
             // Read IsActive
             BooleanSerializer.Instance.Deserialize(out bool isActive, buffer, ref offset);
             player.IsActive = isActive;
+            
+            // Read Achievements list
+            Int32Serializer.Instance.Deserialize(out int achievementsCount, buffer, ref offset);
+            player.Achievements.Clear();
+            for (int i = 0; i < achievementsCount; i++)
+            {
+                StringSerializer.Instance.Deserialize(out string? achievement, buffer, ref offset);
+                player.Achievements.Add(achievement);
+            }
+            
+            // Read Stats dictionary
+            Int32Serializer.Instance.Deserialize(out int statsCount, buffer, ref offset);
+            player.Stats.Clear();
+            for (int i = 0; i < statsCount; i++)
+            {
+                StringSerializer.Instance.Deserialize(out string? key, buffer, ref offset);
+                Int32Serializer.Instance.Deserialize(out int statValue, buffer, ref offset);
+                player.Stats[key] = statValue;
+            }
 
             value = player;
         }
