@@ -73,7 +73,7 @@ var targetAssembly = typeof(PlayerData).Assembly; // initial example
             Console.WriteLine($"Force regeneration: {forceRegeneration}");
             
             // Use embedded template instead of loading from file
-            string templateContent = GetSerializerTemplate(); // TODO: Read from file
+            string templateContent = SerializerTemplate.GetSerializerTemplate();
             var template = Template.Parse(templateContent);
             
             // Find all types in the target assembly that implement IYoloSerializable
@@ -88,6 +88,10 @@ var targetAssembly = typeof(PlayerData).Assembly; // initial example
             {
                 await GenerateSerializer(type, template, outputPath, forceRegeneration);
             }
+            
+            // Generate YoloGeneratedMap and YoloGeneratedSerializer
+            await GenerateTypeMap(serializableTypes, outputPath, forceRegeneration);
+            await GenerateYoloSerializer(outputPath, forceRegeneration);
             
             Console.WriteLine("Done!");
         }
@@ -130,6 +134,275 @@ var targetAssembly = typeof(PlayerData).Assembly; // initial example
             
             // Write the generated code to a file
             await File.WriteAllTextAsync(outputFile, result);
+            
+            Console.WriteLine($"Generated {outputFile}");
+        }
+        
+        private static async Task GenerateTypeMap(List<Type> serializableTypes, string outputPath, bool forceRegeneration)
+        {
+            string outputFile = Path.Combine(outputPath, "YoloGeneratedMap.cs");
+            
+            // Skip generation if the file already exists to avoid overriding manual implementations
+            if (File.Exists(outputFile) && !forceRegeneration)
+            {
+                Console.WriteLine("Skipping YoloGeneratedMap.cs - file already exists (use --force to override)");
+                return;
+            }
+            
+            Console.WriteLine("Generating YoloGeneratedMap.cs");
+            
+            // Build the map file content
+            var sb = new StringBuilder();
+            sb.AppendLine("using System;");
+            sb.AppendLine("using System.Buffers.Binary;");
+            sb.AppendLine("using System.Runtime.CompilerServices;");
+            sb.AppendLine("using YoloSerializer.Core.Contracts;");
+            sb.AppendLine("using YoloSerializer.Core.Models;");
+            sb.AppendLine("using YoloSerializer.Core.Serializers;");
+            sb.AppendLine();
+            sb.AppendLine("namespace YoloSerializer.Tests.Generated");
+            sb.AppendLine("{");
+            sb.AppendLine("    /// <summary>");
+            sb.AppendLine("    /// Hard-coded map of type IDs to serializers for maximum performance");
+            sb.AppendLine("    /// </summary>");
+            sb.AppendLine("    public sealed class YoloGeneratedMap : ITypeMap");
+            sb.AppendLine("    {");
+            sb.AppendLine("        // Singleton instance for performance");
+            sb.AppendLine("        private static readonly YoloGeneratedMap _instance = new YoloGeneratedMap();");
+            sb.AppendLine("        ");
+            sb.AppendLine("        /// <summary>");
+            sb.AppendLine("        /// Gets the singleton instance");
+            sb.AppendLine("        /// </summary>");
+            sb.AppendLine("        public static YoloGeneratedMap Instance => _instance;");
+            sb.AppendLine("        ");
+            sb.AppendLine("        // Private constructor to enforce singleton pattern");
+            sb.AppendLine("        private YoloGeneratedMap() { }");
+            sb.AppendLine("        ");
+            sb.AppendLine("        /// <summary>");
+            sb.AppendLine("        /// Type ID used for null values");
+            sb.AppendLine("        /// </summary>");
+            sb.AppendLine("        public const byte NULL_TYPE_ID = 0;");
+            sb.AppendLine();
+            sb.AppendLine("        #region codegen");
+            
+            // Add type IDs for each serializable type
+            byte typeId = 1;
+            foreach (var type in serializableTypes)
+            {
+                string typeName = type.Name.ToUpperInvariant();
+                sb.AppendLine($"        /// <summary>");
+                sb.AppendLine($"        /// Type ID for {type.Name}");
+                sb.AppendLine($"        /// </summary>");
+                sb.AppendLine($"        public const byte {typeName}_TYPE_ID = {typeId++};");
+                sb.AppendLine("        ");
+            }
+            
+            sb.AppendLine("        #endregion");
+            sb.AppendLine("        ");
+            sb.AppendLine("        /// <summary>");
+            sb.AppendLine("        /// Gets the null type ID for the ITypeMap interface");
+            sb.AppendLine("        /// </summary>");
+            sb.AppendLine("        byte ITypeMap.NullTypeId => NULL_TYPE_ID;");
+            sb.AppendLine("        ");
+            sb.AppendLine("        /// <summary>");
+            sb.AppendLine("        /// Gets the type ID for a type");
+            sb.AppendLine("        /// </summary>");
+            sb.AppendLine("        [MethodImpl(MethodImplOptions.AggressiveInlining)]");
+            sb.AppendLine("        public byte GetTypeId<T>() where T : class, IYoloSerializable");
+            sb.AppendLine("        {");
+            sb.AppendLine("            Type type = typeof(T);");
+            sb.AppendLine();
+            sb.AppendLine("            #region codegen");
+            
+            // Add type ID lookup for each serializable type
+            foreach (var type in serializableTypes)
+            {
+                string typeName = type.Name.ToUpperInvariant();
+                sb.AppendLine($"            if (type == typeof({type.Name}))");
+                sb.AppendLine($"                return {typeName}_TYPE_ID;");
+                sb.AppendLine("                ");
+            }
+            
+            sb.AppendLine("            #endregion");
+            sb.AppendLine("            throw new ArgumentException($\"Unknown type: {type.Name}\");");
+            sb.AppendLine("        }");
+            sb.AppendLine("        ");
+            sb.AppendLine("        /// <summary>");
+            sb.AppendLine("        /// Serializes an object to a byte span without boxing");
+            sb.AppendLine("        /// </summary>");
+            sb.AppendLine("        [MethodImpl(MethodImplOptions.AggressiveInlining)]");
+            sb.AppendLine("        public void Serialize<T>(T obj, Span<byte> buffer, ref int offset) where T : class, IYoloSerializable");
+            sb.AppendLine("        {");
+            sb.AppendLine("            switch (obj)");
+            sb.AppendLine("            {");
+            
+            // Add serialization cases for each type
+            foreach (var type in serializableTypes)
+            {
+                sb.AppendLine($"                case {type.Name} {char.ToLowerInvariant(type.Name[0])}{type.Name.Substring(1)}:");
+                sb.AppendLine($"                    {type.Name}Serializer.Instance.Serialize({char.ToLowerInvariant(type.Name[0])}{type.Name.Substring(1)}, buffer, ref offset);");
+                sb.AppendLine("                    break;");
+                sb.AppendLine("                ");
+            }
+            
+            sb.AppendLine("                default:");
+            sb.AppendLine("                    throw new ArgumentException($\"Unknown type: {obj.GetType().Name}\");");
+            sb.AppendLine("            }");
+            sb.AppendLine("        }");
+            sb.AppendLine("        ");
+            sb.AppendLine("        /// <summary>");
+            sb.AppendLine("        /// Gets the serialized size of an object without boxing");
+            sb.AppendLine("        /// </summary>");
+            sb.AppendLine("        [MethodImpl(MethodImplOptions.AggressiveInlining)]");
+            sb.AppendLine("        public int GetSerializedSize<T>(T obj) where T : class, IYoloSerializable");
+            sb.AppendLine("        {");
+            sb.AppendLine("            switch (obj)");
+            sb.AppendLine("            {");
+            
+            // Add size calculation cases for each type
+            foreach (var type in serializableTypes)
+            {
+                sb.AppendLine($"                case {type.Name} {char.ToLowerInvariant(type.Name[0])}{type.Name.Substring(1)}:");
+                sb.AppendLine($"                    return {type.Name}Serializer.Instance.GetSize({char.ToLowerInvariant(type.Name[0])}{type.Name.Substring(1)});");
+                sb.AppendLine("                ");
+            }
+            
+            sb.AppendLine("                default:");
+            sb.AppendLine("                    throw new ArgumentException($\"Unknown type: {obj.GetType().Name}\");");
+            sb.AppendLine("            }");
+            sb.AppendLine("        }");
+            sb.AppendLine("        ");
+            sb.AppendLine("        /// <summary>");
+            sb.AppendLine("        /// Deserializes an object from a byte span based on type ID");
+            sb.AppendLine("        /// </summary>");
+            sb.AppendLine("        [MethodImpl(MethodImplOptions.AggressiveInlining)]");
+            sb.AppendLine("        public object? DeserializeById(byte typeId, ReadOnlySpan<byte> buffer, ref int offset)");
+            sb.AppendLine("        {");
+            sb.AppendLine("            switch (typeId)");
+            sb.AppendLine("            {");
+            
+            // Add deserialization cases for each type
+            foreach (var type in serializableTypes)
+            {
+                string typeName = type.Name.ToUpperInvariant();
+                string isValueType = !IsReferenceType(type) ? "" : "?";
+                
+                sb.AppendLine($"                case {typeName}_TYPE_ID:");
+                sb.AppendLine($"                    {type.Name}{isValueType} {char.ToLowerInvariant(type.Name[0])}{type.Name.Substring(1)}Result;");
+                sb.AppendLine($"                    {type.Name}Serializer.Instance.Deserialize(out {char.ToLowerInvariant(type.Name[0])}{type.Name.Substring(1)}Result, buffer, ref offset);");
+                sb.AppendLine($"                    return {char.ToLowerInvariant(type.Name[0])}{type.Name.Substring(1)}Result;");
+                sb.AppendLine("                ");
+            }
+            
+            sb.AppendLine("                default:");
+            sb.AppendLine("                    throw new ArgumentException($\"Unknown type ID: {typeId}\");");
+            sb.AppendLine("            }");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+            sb.AppendLine("}");
+            
+            // Write the generated code to a file
+            await File.WriteAllTextAsync(outputFile, sb.ToString());
+            
+            Console.WriteLine($"Generated {outputFile}");
+        }
+
+        private static async Task GenerateYoloSerializer(string outputPath, bool forceRegeneration)
+        {
+            string outputFile = Path.Combine(outputPath, "YoloGeneratedSerializer.cs");
+            
+            // Skip generation if the file already exists to avoid overriding manual implementations
+            if (File.Exists(outputFile) && !forceRegeneration)
+            {
+                Console.WriteLine("Skipping YoloGeneratedSerializer.cs - file already exists (use --force to override)");
+                return;
+            }
+            
+            Console.WriteLine("Generating YoloGeneratedSerializer.cs");
+            
+            // Build the serializer file content
+            var sb = new StringBuilder();
+            sb.AppendLine("using System;");
+            sb.AppendLine("using System.Buffers.Binary;");
+            sb.AppendLine("using System.Runtime.CompilerServices;");
+            sb.AppendLine("using YoloSerializer.Core;");
+            sb.AppendLine("using YoloSerializer.Core.Contracts;");
+            sb.AppendLine("using YoloSerializer.Core.Models;");
+            sb.AppendLine("using YoloSerializer.Core.Serializers;");
+            sb.AppendLine("using YoloSerializer.Tests.Generated;");
+            sb.AppendLine();
+            sb.AppendLine("namespace YoloSerializer.Core.Serializers");
+            sb.AppendLine("{");
+            sb.AppendLine("    /// <summary>");
+            sb.AppendLine("    /// High-performance serializer using YoloGeneratedMap for optimal dispatch");
+            sb.AppendLine("    /// </summary>");
+            sb.AppendLine("    public sealed class YoloGeneratedSerializer");
+            sb.AppendLine("    {");
+            sb.AppendLine("        private static readonly YoloGeneratedSerializer _instance = new YoloGeneratedSerializer();");
+            sb.AppendLine("        private readonly GeneratedSerializer<YoloGeneratedMap> _serializer;");
+            sb.AppendLine("        ");
+            sb.AppendLine("        /// <summary>");
+            sb.AppendLine("        /// Singleton instance for performance");
+            sb.AppendLine("        /// </summary>");
+            sb.AppendLine("        public static YoloGeneratedSerializer Instance => _instance;");
+            sb.AppendLine("        ");
+            sb.AppendLine("        /// <summary>");
+            sb.AppendLine("        /// Constructor - initializes with YoloGeneratedMap");
+            sb.AppendLine("        /// </summary>");
+            sb.AppendLine("        private YoloGeneratedSerializer()");
+            sb.AppendLine("        {");
+            sb.AppendLine("            _serializer = new GeneratedSerializer<YoloGeneratedMap>(YoloGeneratedMap.Instance);");
+            sb.AppendLine("        }");
+            sb.AppendLine("        ");
+            sb.AppendLine("        /// <summary>");
+            sb.AppendLine("        /// Serializes an object to a byte span");
+            sb.AppendLine("        /// </summary>");
+            sb.AppendLine("        [MethodImpl(MethodImplOptions.AggressiveInlining)]");
+            sb.AppendLine("        public void Serialize<T>(T? obj, Span<byte> buffer, ref int offset) where T : class, IYoloSerializable");
+            sb.AppendLine("        {");
+            sb.AppendLine("            _serializer.Serialize(obj, buffer, ref offset);");
+            sb.AppendLine("        }");
+            sb.AppendLine("        ");
+            sb.AppendLine("        /// <summary>");
+            sb.AppendLine("        /// Serializes an object to a byte span with pre-computed size");
+            sb.AppendLine("        /// </summary>");
+            sb.AppendLine("        [MethodImpl(MethodImplOptions.AggressiveInlining)]");
+            sb.AppendLine("        public void SerializeWithoutSizeCheck<T>(T? obj, Span<byte> buffer, ref int offset) where T : class, IYoloSerializable");
+            sb.AppendLine("        {");
+            sb.AppendLine("            _serializer.SerializeWithoutSizeCheck(obj, buffer, ref offset);");
+            sb.AppendLine("        }");
+            sb.AppendLine("        ");
+            sb.AppendLine("        /// <summary>");
+            sb.AppendLine("        /// Deserializes an object from a byte span");
+            sb.AppendLine("        /// </summary>");
+            sb.AppendLine("        [MethodImpl(MethodImplOptions.AggressiveInlining)]");
+            sb.AppendLine("        public object? Deserialize(ReadOnlySpan<byte> buffer, ref int offset)");
+            sb.AppendLine("        {");
+            sb.AppendLine("            return _serializer.Deserialize(buffer, ref offset);");
+            sb.AppendLine("        }");
+            sb.AppendLine("        ");
+            sb.AppendLine("        /// <summary>");
+            sb.AppendLine("        /// Deserializes an object from a byte span with strong typing");
+            sb.AppendLine("        /// </summary>");
+            sb.AppendLine("        [MethodImpl(MethodImplOptions.AggressiveInlining)]");
+            sb.AppendLine("        public T? Deserialize<T>(ReadOnlySpan<byte> buffer, ref int offset) where T : class, IYoloSerializable");
+            sb.AppendLine("        {");
+            sb.AppendLine("            return _serializer.Deserialize<T>(buffer, ref offset);");
+            sb.AppendLine("        }");
+            sb.AppendLine("        ");
+            sb.AppendLine("        /// <summary>");
+            sb.AppendLine("        /// Gets the serialized size of an object");
+            sb.AppendLine("        /// </summary>");
+            sb.AppendLine("        [MethodImpl(MethodImplOptions.AggressiveInlining)]");
+            sb.AppendLine("        public int GetSerializedSize<T>(T? obj) where T : class, IYoloSerializable");
+            sb.AppendLine("        {");
+            sb.AppendLine("            return _serializer.GetSerializedSize(obj);");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+            sb.AppendLine("}");
+            
+            // Write the generated code to a file
+            await File.WriteAllTextAsync(outputFile, sb.ToString());
             
             Console.WriteLine($"Generated {outputFile}");
         }
@@ -420,111 +693,6 @@ var targetAssembly = typeof(PlayerData).Assembly; // initial example
         private static bool IsNullableType(Type type)
         {
             return Nullable.GetUnderlyingType(type) != null || !type.IsValueType;
-        }
-
-        // Embedded template
-        private static string GetSerializerTemplate()
-        {
-            return @"using System;
-using System.Buffers;
-using System.Buffers.Binary;
-using System.Collections.Generic;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using System.Text;
-using YoloSerializer.Core;
-using YoloSerializer.Core.Models;
-using YoloSerializer.Core.Serializers;
-using YoloSerializer.Core.Contracts;
-
-namespace YoloSerializer.Core.Serializers
-{
-    /// <summary>
-    /// High-performance serializer for {{ class_name }} objects
-    /// </summary>
-    public sealed class {{ serializer_name }} : ISerializer<{{ full_type_name }}{{ nullable_marker }}>
-    {
-        private static readonly {{ serializer_name }} _instance = new {{ serializer_name }}();
-        
-        /// <summary>
-        /// Singleton instance for performance
-        /// </summary>
-        public static {{ serializer_name }} Instance => _instance;
-        
-        private {{ serializer_name }}() { }
-        
-        // Maximum size to allocate on stack
-        private const int MaxStackAllocSize = 1024;
-
-{{ if has_object_pool }}
-        // Object pooling to avoid allocations during deserialization
-        private static readonly ObjectPool<{{ class_name }}> _{{ class_variable_name }}Pool = 
-            new ObjectPool<{{ class_name }}>(() => new {{ class_name }}());
-{{ end }}
-            
-        // Shared empty array for optimization
-        private static readonly byte[] EmptyArray = Array.Empty<byte>();
-
-        /// <summary>
-        /// Gets the total size needed to serialize the {{ class_name }}
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int GetSize({{ full_type_name }}{{ nullable_marker }} {{ instance_name }})
-        {
-{{ if is_nullable }}
-            if ({{ instance_name }} == null)
-                throw new ArgumentNullException(nameof({{ instance_name }}));
-{{ end }}
-            
-            int size = 0;
-            
-{{ for prop in properties }}
-            // Size of {{ prop.name }} ({{ prop.type }})
-            size += {{ prop.size_calculation }};
-{{ end }}
-            
-            return size;
-        }
-
-        /// <summary>
-        /// Serializes a {{ class_name }} object to a byte span
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Serialize({{ full_type_name }}{{ nullable_marker }} {{ instance_name }}, Span<byte> buffer, ref int offset)
-        {
-{{ if is_nullable }}
-            if ({{ instance_name }} == null)
-                throw new ArgumentNullException(nameof({{ instance_name }}));
-{{ end }}
-            
-{{ for prop in properties }}
-            // Serialize {{ prop.name }} ({{ prop.type }})
-            {{ prop.serialize_code }}
-{{ end }}
-        }
-
-        /// <summary>
-        /// Deserializes a {{ class_name }} object from a byte span
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Deserialize(out {{ full_type_name }}{{ nullable_marker }} value, ReadOnlySpan<byte> buffer, ref int offset)
-        {
-{{ if has_object_pool }}
-            // Get a {{ class_name }} instance from pool
-            var {{ instance_name }} = _{{ class_variable_name }}Pool.Get();
-{{ else }}
-            var {{ instance_name }} = new {{ class_name }}();
-{{ end }}
-
-{{ for prop in properties }}
-            // Read {{ prop.name }}
-            {{ prop.deserialize_code }}
-{{ end }}
-
-            value = {{ instance_name }};
-        }
-    }
-}";
         }
     }
 }

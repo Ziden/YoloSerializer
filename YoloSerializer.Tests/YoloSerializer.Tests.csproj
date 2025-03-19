@@ -27,4 +27,8 @@
     <ProjectReference Include="..\YoloSerializer.Core\YoloSerializer.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="GeneratedOld\" />
+  </ItemGroup>
+
 </Project>

@@ -1,4 +1,16 @@
-using System;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace YoloSerializer.Generator
+{
+    public class SerializerTemplate
+    {
+        public static string GetSerializerTemplate()
+        {
+            return @"using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Generic;
@@ -97,4 +109,7 @@ namespace YoloSerializer.Core.Serializers
             value = {{ instance_name }};
         }
     }
-} 
+}";
+        }
+    }
+}

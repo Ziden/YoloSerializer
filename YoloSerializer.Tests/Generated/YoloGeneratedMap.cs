@@ -32,12 +32,13 @@ namespace YoloSerializer.Tests.Generated
         /// <summary>
         /// Type ID for PlayerData
         /// </summary>
-        public const byte PLAYER_DATA_TYPE_ID = 1;
+        public const byte PLAYERDATA_TYPE_ID = 1;
         
         /// <summary>
         /// Type ID for Position
         /// </summary>
         public const byte POSITION_TYPE_ID = 2;
+        
         #endregion
         
         /// <summary>
@@ -55,10 +56,11 @@ namespace YoloSerializer.Tests.Generated
 
             #region codegen
             if (type == typeof(PlayerData))
-                return PLAYER_DATA_TYPE_ID;
+                return PLAYERDATA_TYPE_ID;
                 
             if (type == typeof(Position))
                 return POSITION_TYPE_ID;
+                
             #endregion
             throw new ArgumentException($"Unknown type: {type.Name}");
         }
@@ -111,13 +113,13 @@ namespace YoloSerializer.Tests.Generated
         {
             switch (typeId)
             {
-                case PLAYER_DATA_TYPE_ID:
-                    PlayerData? playerResult;
-                    PlayerDataSerializer.Instance.Deserialize(out playerResult, buffer, ref offset);
-                    return playerResult;
+                case PLAYERDATA_TYPE_ID:
+                    PlayerData? playerDataResult;
+                    PlayerDataSerializer.Instance.Deserialize(out playerDataResult, buffer, ref offset);
+                    return playerDataResult;
                 
                 case POSITION_TYPE_ID:
-                    Position positionResult;
+                    Position? positionResult;
                     PositionSerializer.Instance.Deserialize(out positionResult, buffer, ref offset);
                     return positionResult;
                 
@@ -126,4 +128,4 @@ namespace YoloSerializer.Tests.Generated
             }
         }
     }
-} 
+}

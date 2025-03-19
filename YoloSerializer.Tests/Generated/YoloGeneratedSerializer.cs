@@ -75,4 +75,4 @@ namespace YoloSerializer.Core.Serializers
             return _serializer.GetSerializedSize(obj);
         }
     }
-} 
+}
