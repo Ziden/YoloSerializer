@@ -1,72 +1,89 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
 namespace YoloSerializer.Core.Serializers
 {
     /// <summary>
     /// Serializer for List{T}
     /// </summary>
+    /// <typeparam name="T">The element type</typeparam>
     public class ListSerializer<T> : ISerializer<List<T>?>
     {
         private readonly ISerializer<T> _elementSerializer;
+        private const int SmallListThreshold = 8;
 
         /// <summary>
-        /// Creates a new instance of ListSerializer
+        /// Initializes a new instance of the <see cref="ListSerializer{T}"/> class
         /// </summary>
-        /// <param name="elementSerializer">The serializer for list elements</param>
+        /// <param name="elementSerializer">The serializer for each element in the list</param>
         public ListSerializer(ISerializer<T> elementSerializer)
         {
             _elementSerializer = elementSerializer ?? throw new ArgumentNullException(nameof(elementSerializer));
         }
 
-        /// <inheritdoc/>
-        public void Serialize(List<T>? value, Span<byte> span, ref int offset)
+        /// <inheritdoc />
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Serialize(List<T>? value, Span<byte> buffer, ref int offset)
         {
             if (value == null)
             {
-                span.WriteInt32(ref offset, -1);
+                // Write -1 to indicate null list
+                BitConverter.TryWriteBytes(buffer.Slice(offset), -1);
+                offset += sizeof(int);
                 return;
             }
 
-            span.WriteInt32(ref offset, value.Count);
-            
+            // Write count
+            BitConverter.TryWriteBytes(buffer.Slice(offset), value.Count);
+            offset += sizeof(int);
+
+            // Write elements
             foreach (var item in value)
             {
-                _elementSerializer.Serialize(item, span, ref offset);
+                _elementSerializer.Serialize(item, buffer, ref offset);
             }
         }
 
-        /// <inheritdoc/>
-        public void Deserialize(out List<T>? value, ReadOnlySpan<byte> span, ref int offset)
+        /// <inheritdoc />
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Deserialize(out List<T>? value, ReadOnlySpan<byte> buffer, ref int offset)
         {
-            int count = span.ReadInt32(ref offset);
-            
+            // Read count
+            int count = BitConverter.ToInt32(buffer.Slice(offset));
+            offset += sizeof(int);
+
             if (count == -1)
             {
+                // Null list
                 value = null;
                 return;
             }
 
+            // Create list with capacity
             value = new List<T>(count);
-            
+
+            // Read elements
             for (int i = 0; i < count; i++)
             {
                 T item;
-                _elementSerializer.Deserialize(out item, span, ref offset);
+                _elementSerializer.Deserialize(out item, buffer, ref offset);
                 value.Add(item);
             }
         }
 
-        /// <inheritdoc/>
+        /// <inheritdoc />
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int GetSize(List<T>? value)
         {
             if (value == null)
             {
-                return sizeof(int);
+                return sizeof(int); // Just the count (-1)
             }
 
-            int size = sizeof(int); // List count
-            
+            int size = sizeof(int); // Count
+
+            // Add size of each element
             foreach (var item in value)
             {
                 size += _elementSerializer.GetSize(item);

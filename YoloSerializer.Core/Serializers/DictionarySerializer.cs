@@ -1,5 +1,7 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
 namespace YoloSerializer.Core.Serializers
 {
@@ -11,6 +13,8 @@ namespace YoloSerializer.Core.Serializers
     {
         private readonly ISerializer<TKey> _keySerializer;
         private readonly ISerializer<TValue> _valueSerializer;
+        private const int MaxStackAllocSize = 256;
+        private const int SmallDictThreshold = 8;
 
         /// <summary>
         /// Creates a new instance of DictionarySerializer
@@ -24,27 +28,46 @@ namespace YoloSerializer.Core.Serializers
         }
 
         /// <inheritdoc/>
-        public void Serialize(Dictionary<TKey, TValue>? value, Span<byte> span, ref int offset)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Serialize(Dictionary<TKey, TValue>? value, Span<byte> buffer, ref int offset)
         {
             if (value == null)
             {
-                span.WriteInt32(ref offset, -1);
+                BitConverter.TryWriteBytes(buffer.Slice(offset), -1);
+                offset += sizeof(int);
                 return;
             }
 
-            span.WriteInt32(ref offset, value.Count);
-            
+            int count = value.Count;
+            BitConverter.TryWriteBytes(buffer.Slice(offset), count);
+            offset += sizeof(int);
+
+            // For small dictionaries, avoid enumerator allocation
+            if (count <= SmallDictThreshold)
+            {
+                using var enumerator = value.GetEnumerator();
+                for (int i = 0; i < count && enumerator.MoveNext(); i++)
+                {
+                    _keySerializer.Serialize(enumerator.Current.Key, buffer, ref offset);
+                    _valueSerializer.Serialize(enumerator.Current.Value, buffer, ref offset);
+                }
+                return;
+            }
+
+            // For larger dictionaries, use foreach to avoid enumerator allocation overhead
             foreach (var kvp in value)
             {
-                _keySerializer.Serialize(kvp.Key, span, ref offset);
-                _valueSerializer.Serialize(kvp.Value, span, ref offset);
+                _keySerializer.Serialize(kvp.Key, buffer, ref offset);
+                _valueSerializer.Serialize(kvp.Value, buffer, ref offset);
             }
         }
 
         /// <inheritdoc/>
-        public void Deserialize(out Dictionary<TKey, TValue>? value, ReadOnlySpan<byte> span, ref int offset)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Deserialize(out Dictionary<TKey, TValue>? value, ReadOnlySpan<byte> buffer, ref int offset)
         {
-            int count = span.ReadInt32(ref offset);
+            int count = BitConverter.ToInt32(buffer.Slice(offset));
+            offset += sizeof(int);
             
             if (count == -1)
             {
@@ -52,19 +75,66 @@ namespace YoloSerializer.Core.Serializers
                 return;
             }
 
-            value = new Dictionary<TKey, TValue>(count);
-            
-            for (int i = 0; i < count; i++)
+            // Preallocate with exact capacity and a load factor that avoids resizing
+            value = new Dictionary<TKey, TValue>(count + (count / 3), EqualityComparer<TKey>.Default);
+
+            if (count <= SmallDictThreshold)
             {
-                TKey key;
-                TValue val;
-                _keySerializer.Deserialize(out key, span, ref offset);
-                _valueSerializer.Deserialize(out val, span, ref offset);
-                value.Add(key, val);
+                // For small dictionaries, deserialize directly
+                for (int i = 0; i < count; i++)
+                {
+                    TKey key;
+                    TValue val;
+                    _keySerializer.Deserialize(out key, buffer, ref offset);
+                    _valueSerializer.Deserialize(out val, buffer, ref offset);
+                    value.Add(key, val);
+                }
+                return;
+            }
+
+            // For larger dictionaries, use array pooling to batch the deserialization
+            int batchSize = Math.Min(count, MaxStackAllocSize / 32); // Conservative estimate for key+value size
+            if (batchSize <= SmallDictThreshold)
+            {
+                // If batch size is small, just use direct deserialization
+                for (int i = 0; i < count; i++)
+                {
+                    TKey key;
+                    TValue val;
+                    _keySerializer.Deserialize(out key, buffer, ref offset);
+                    _valueSerializer.Deserialize(out val, buffer, ref offset);
+                    value.Add(key, val);
+                }
+                return;
+            }
+
+            TKey[] keyBuffer = ArrayPool<TKey>.Shared.Rent(batchSize);
+            TValue[] valueBuffer = ArrayPool<TValue>.Shared.Rent(batchSize);
+            try
+            {
+                for (int i = 0; i < count; i += batchSize)
+                {
+                    int currentBatch = Math.Min(batchSize, count - i);
+                    for (int j = 0; j < currentBatch; j++)
+                    {
+                        _keySerializer.Deserialize(out keyBuffer[j], buffer, ref offset);
+                        _valueSerializer.Deserialize(out valueBuffer[j], buffer, ref offset);
+                    }
+                    for (int j = 0; j < currentBatch; j++)
+                    {
+                        value.Add(keyBuffer[j], valueBuffer[j]);
+                    }
+                }
+            }
+            finally
+            {
+                ArrayPool<TKey>.Shared.Return(keyBuffer);
+                ArrayPool<TValue>.Shared.Return(valueBuffer);
             }
         }
 
         /// <inheritdoc/>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int GetSize(Dictionary<TKey, TValue>? value)
         {
             if (value == null)
@@ -72,8 +142,22 @@ namespace YoloSerializer.Core.Serializers
                 return sizeof(int);
             }
 
+            int count = value.Count;
             int size = sizeof(int); // Dictionary count
-            
+
+            // For small dictionaries, use enumerator
+            if (count <= SmallDictThreshold)
+            {
+                using var enumerator = value.GetEnumerator();
+                for (int i = 0; i < count && enumerator.MoveNext(); i++)
+                {
+                    size += _keySerializer.GetSize(enumerator.Current.Key);
+                    size += _valueSerializer.GetSize(enumerator.Current.Value);
+                }
+                return size;
+            }
+
+            // For larger dictionaries, use foreach
             foreach (var kvp in value)
             {
                 size += _keySerializer.GetSize(kvp.Key);
