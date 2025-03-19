@@ -1,22 +1,10 @@
 using System;
 using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
-using YoloSerializer.Core.Models;
-using YoloSerializer.Core.Serializers;
+using YoloSerializer.Core.Contracts;
 
 namespace YoloSerializer.Core
 {
-    /// <summary>
-    /// Marker interface for serializable types
-    /// </summary>
-    public interface IYoloSerializable
-    {
-        /// <summary>
-        /// Type ID for serialization (must be unique per type)
-        /// </summary>
-        byte TypeId { get; }
-    }
-    
     /// <summary>
     /// High-performance serializer using pattern matching for optimal dispatch
     /// </summary>
@@ -45,42 +33,19 @@ namespace YoloSerializer.Core
             EnsureBufferSize(buffer, offset, sizeof(byte));
             buffer[offset++] = obj.TypeId;
             
-            // Type-based dispatch using pattern matching
-            if (obj is PlayerData playerData)
-            {
-                PlayerDataSerializer.Serialize(playerData, buffer, ref offset);
-            }
-            else
-            {
-                throw new ArgumentException($"Unsupported type: {obj.GetType().Name}");
-            }
+            // Dispatch to the appropriate serializer
+            SerializeObject(obj, buffer, ref offset);
         }
         
         /// <summary>
-        /// Serializes an object to a byte span with pre-computed size
+        /// Internal method to serialize objects with pattern matching
+        /// This will be code-generated in the future
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void SerializeWithoutSizeCheck<T>(T? obj, Span<byte> buffer, ref int offset) where T : class, IYoloSerializable
+        private static void SerializeObject(IYoloSerializable obj, Span<byte> buffer, ref int offset)
         {
-            // Handle null case
-            if (obj == null)
-            {
-                buffer[offset++] = NULL_TYPE_ID;
-                return;
-            }
-            
-            // Write type ID from the interface
-            buffer[offset++] = obj.TypeId;
-            
-            // Type-based dispatch using pattern matching
-            if (obj is PlayerData playerData)
-            {
-                PlayerDataSerializer.Serialize(playerData, buffer, ref offset);
-            }
-            else
-            {
-                throw new ArgumentException($"Unsupported type: {obj.GetType().Name}");
-            }
+            // This will be replaced by generated code
+            throw new NotImplementedException($"No serializer registered for type {obj.GetType().Name}");
         }
         
         /// <summary>
@@ -99,12 +64,19 @@ namespace YoloSerializer.Core
             if (typeId == NULL_TYPE_ID)
                 return null;
                 
-            // Type-based dispatch using type ID
-            return typeId switch
-            {
-                PlayerData.TYPE_ID => PlayerDataSerializer.Deserialize(buffer, ref offset),
-                _ => throw new InvalidOperationException($"Unknown type ID: {typeId}")
-            };
+            // Dispatch to appropriate deserializer based on type ID
+            return DeserializeObject(typeId, buffer, ref offset);
+        }
+        
+        /// <summary>
+        /// Internal method to deserialize objects based on type ID
+        /// This will be code-generated in the future
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static object? DeserializeObject(byte typeId, ReadOnlySpan<byte> buffer, ref int offset)
+        {
+            // This will be replaced by generated code
+            throw new NotImplementedException($"No deserializer registered for type ID {typeId}");
         }
         
         /// <summary>
@@ -123,17 +95,14 @@ namespace YoloSerializer.Core
             if (typeId == NULL_TYPE_ID)
                 return null;
                 
-            // Type safety checks for strongly-typed deserialization
-            if (typeof(T) == typeof(PlayerData))
-            {
-                if (typeId != PlayerData.TYPE_ID)
-                    throw new InvalidCastException($"Cannot deserialize type ID {typeId} as PlayerData");
-                    
-                return (T)(object)PlayerDataSerializer.Deserialize(buffer, ref offset);
-            }
+            // Deserialize object
+            object? obj = DeserializeObject(typeId, buffer, ref offset);
             
-            // If we get here, we don't know how to deserialize this type
-            throw new InvalidOperationException($"Unknown type: {typeof(T).Name}");
+            // Verify type before returning
+            if (obj is T result)
+                return result;
+                
+            throw new InvalidCastException($"Cannot cast type ID {typeId} to {typeof(T).Name}");
         }
         
         /// <summary>
@@ -146,13 +115,19 @@ namespace YoloSerializer.Core
             if (obj == null)
                 return sizeof(byte); // Just the null type ID marker
                 
-            // Type ID byte + type-specific size
-            if (obj is PlayerData playerData)
-            {
-                return sizeof(byte) + playerData.GetSerializedSize();
-            }
-            
-            throw new ArgumentException($"Unsupported type: {obj.GetType().Name}");
+            // Type ID byte + object-specific size
+            return sizeof(byte) + GetObjectSize(obj);
+        }
+        
+        /// <summary>
+        /// Internal method to get object size with pattern matching
+        /// This will be code-generated in the future
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int GetObjectSize(IYoloSerializable obj)
+        {
+            // This will be replaced by generated code
+            throw new NotImplementedException($"No size calculator registered for type {obj.GetType().Name}");
         }
         
         /// <summary>

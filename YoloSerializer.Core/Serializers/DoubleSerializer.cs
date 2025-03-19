@@ -1,33 +1,37 @@
 using System;
+using System.Runtime.CompilerServices;
+using YoloSerializer.Core.Contracts;
 
 namespace YoloSerializer.Core.Serializers
 {
     /// <summary>
-    /// Serializer for System.Double
+    /// Serializer for double-precision floating point numbers
     /// </summary>
-    public class DoubleSerializer : ISerializer<double>
+    public static class DoubleSerializer
     {
         /// <summary>
-        /// Gets the singleton instance
+        /// Serializes a double to a byte span
         /// </summary>
-        public static readonly DoubleSerializer Instance = new DoubleSerializer();
-
-        private DoubleSerializer() { }
-
-        /// <inheritdoc/>
-        public void Serialize(double value, Span<byte> span, ref int offset)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void Serialize(double value, Span<byte> span, ref int offset)
         {
             span.WriteDouble(ref offset, value);
         }
-
-        /// <inheritdoc/>
-        public void Deserialize(out double value, ReadOnlySpan<byte> span, ref int offset)
+        
+        /// <summary>
+        /// Deserializes a double from a byte span
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void Deserialize(out double value, ReadOnlySpan<byte> span, ref int offset)
         {
             value = span.ReadDouble(ref offset);
         }
-
-        /// <inheritdoc/>
-        public int GetSize(double value)
+        
+        /// <summary>
+        /// Gets the size in bytes needed to serialize a double (always 8)
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static int GetSize(double value)
         {
             return sizeof(double);
         }

@@ -5,12 +5,13 @@ namespace YoloSerializer.Core.Models
     /// <summary>
     /// Represents a 3D position in the game world
     /// </summary>
-    public struct Position
+    public class Position
     {
         public float X { get; set; }
         public float Y { get; set; }
         public float Z { get; set; }
 
+        public Position() { }
         public Position(float x, float y, float z)
         {
             X = x;

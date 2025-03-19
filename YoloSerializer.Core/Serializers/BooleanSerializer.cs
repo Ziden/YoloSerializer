@@ -1,33 +1,37 @@
 using System;
+using System.Runtime.CompilerServices;
+using YoloSerializer.Core.Contracts;
 
 namespace YoloSerializer.Core.Serializers
 {
     /// <summary>
-    /// Serializer for System.Boolean
+    /// Serializer for boolean values
     /// </summary>
-    public class BooleanSerializer : ISerializer<bool>
+    public static class BooleanSerializer
     {
         /// <summary>
-        /// Gets the singleton instance
+        /// Serializes a boolean to a byte span
         /// </summary>
-        public static readonly BooleanSerializer Instance = new BooleanSerializer();
-
-        private BooleanSerializer() { }
-
-        /// <inheritdoc/>
-        public void Serialize(bool value, Span<byte> span, ref int offset)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void Serialize(bool value, Span<byte> span, ref int offset)
         {
             span.WriteBool(ref offset, value);
         }
-
-        /// <inheritdoc/>
-        public void Deserialize(out bool value, ReadOnlySpan<byte> span, ref int offset)
+        
+        /// <summary>
+        /// Deserializes a boolean from a byte span
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void Deserialize(out bool value, ReadOnlySpan<byte> span, ref int offset)
         {
             value = span.ReadBool(ref offset);
         }
-
-        /// <inheritdoc/>
-        public int GetSize(bool value)
+        
+        /// <summary>
+        /// Gets the size in bytes needed to serialize a boolean (always 1)
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static int GetSize(bool value)
         {
             return sizeof(byte);
         }

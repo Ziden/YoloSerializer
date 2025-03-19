@@ -1,33 +1,37 @@
 using System;
+using System.Runtime.CompilerServices;
+using YoloSerializer.Core.Contracts;
 
 namespace YoloSerializer.Core.Serializers
 {
     /// <summary>
-    /// Serializer for System.Int64
+    /// Serializer for 64-bit integers
     /// </summary>
-    public class Int64Serializer : ISerializer<long>
+    public static class Int64Serializer
     {
         /// <summary>
-        /// Gets the singleton instance
+        /// Serializes a long to a byte span
         /// </summary>
-        public static readonly Int64Serializer Instance = new Int64Serializer();
-
-        private Int64Serializer() { }
-
-        /// <inheritdoc/>
-        public void Serialize(long value, Span<byte> span, ref int offset)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void Serialize(long value, Span<byte> span, ref int offset)
         {
             span.WriteInt64(ref offset, value);
         }
-
-        /// <inheritdoc/>
-        public void Deserialize(out long value, ReadOnlySpan<byte> span, ref int offset)
+        
+        /// <summary>
+        /// Deserializes a long from a byte span
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void Deserialize(out long value, ReadOnlySpan<byte> span, ref int offset)
         {
             value = span.ReadInt64(ref offset);
         }
-
-        /// <inheritdoc/>
-        public int GetSize(long value)
+        
+        /// <summary>
+        /// Gets the size in bytes needed to serialize a long (always 8)
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static int GetSize(long value)
         {
             return sizeof(long);
         }

@@ -209,7 +209,7 @@ namespace YoloSerializer.Tests
             
             // Pre-allocate buffers
             int directSize = player.GetSerializedSize();
-            int patternSize = Core.YoloSerializer.GetSerializedSize(player);
+            int patternSize = Core.GeneratedSerializerEntry.GetSerializedSize(player);
             
             var directBuffer = new byte[directSize];
             var patternBuffer = new byte[patternSize];
@@ -221,7 +221,7 @@ namespace YoloSerializer.Tests
                 player.Serialize(directBuffer, ref offset);
                 
                 offset = 0;
-                Core.YoloSerializer.Serialize(player, patternBuffer, ref offset);
+                Core.GeneratedSerializerEntry.Serialize(player, patternBuffer, ref offset);
             }
             
             // Let the GC settle
@@ -251,10 +251,10 @@ namespace YoloSerializer.Tests
             for (int i = 0; i < iterations; i++)
             {
                 int offset = 0;
-                Core.YoloSerializer.SerializeWithoutSizeCheck(player, patternBuffer, ref offset);
+                Core.GeneratedSerializerEntry.SerializeWithoutSizeCheck(player, patternBuffer, ref offset);
                 
                 offset = 0;
-                var result = Core.YoloSerializer.Deserialize<PlayerData>(patternBuffer, ref offset);
+                var result = Core.GeneratedSerializerEntry.Deserialize<PlayerData>(patternBuffer, ref offset);
             }
             patternWatch.Stop();
             

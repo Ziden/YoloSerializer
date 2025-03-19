@@ -30,19 +30,19 @@ namespace YoloSerializer.Tests
             );
             
             // Calculate required buffer size
-            int size = Core.YoloSerializer.GetSerializedSize(original);
+            int size = Core.GeneratedSerializerEntry.GetSerializedSize(original);
             var buffer = new byte[size];
             int offset = 0;
 
             // Act - serialize
-            Core.YoloSerializer.Serialize(original, buffer, ref offset);
+            Core.GeneratedSerializerEntry.Serialize(original, buffer, ref offset);
             
             // Verify offset advancement
             Assert.Equal(size, offset);
             
             // Reset offset for deserialization
             offset = 0;
-            var result = Core.YoloSerializer.Deserialize<PlayerData>(buffer, ref offset);
+            var result = Core.GeneratedSerializerEntry.Deserialize<PlayerData>(buffer, ref offset);
 
             // Assert
             Assert.NotNull(result);
@@ -65,11 +65,11 @@ namespace YoloSerializer.Tests
             int offset = 0;
 
             // Act - serialize
-            Core.YoloSerializer.Serialize(original, buffer, ref offset);
+            Core.GeneratedSerializerEntry.Serialize(original, buffer, ref offset);
             
             // Reset offset for deserialization
             offset = 0;
-            var result = Core.YoloSerializer.Deserialize<PlayerData>(buffer, ref offset);
+            var result = Core.GeneratedSerializerEntry.Deserialize<PlayerData>(buffer, ref offset);
 
             // Assert
             Assert.Null(result);
@@ -90,7 +90,7 @@ namespace YoloSerializer.Tests
             
             // Act - Calculate the size using both methods
             int directSize = player.GetSerializedSize() + sizeof(byte); // Add byte for type ID
-            int yoloSize = Core.YoloSerializer.GetSerializedSize(player);
+            int yoloSize = Core.GeneratedSerializerEntry.GetSerializedSize(player);
             
             // Assert - Compare sizes
             Assert.Equal(directSize, yoloSize);
@@ -111,7 +111,7 @@ namespace YoloSerializer.Tests
             
             // Pre-allocate buffers
             int directSize = player.GetSerializedSize();
-            int patternSize = Core.YoloSerializer.GetSerializedSize(player);
+            int patternSize = Core.GeneratedSerializerEntry.GetSerializedSize(player);
             
             var directBuffer = new byte[directSize];
             var patternBuffer = new byte[patternSize];
@@ -123,7 +123,7 @@ namespace YoloSerializer.Tests
                 player.Serialize(directBuffer, ref offset);
                 
                 offset = 0;
-                Core.YoloSerializer.Serialize(player, patternBuffer, ref offset);
+                Core.GeneratedSerializerEntry.Serialize(player, patternBuffer, ref offset);
             }
             
             // Let the GC settle
@@ -153,10 +153,10 @@ namespace YoloSerializer.Tests
             for (int i = 0; i < iterations; i++)
             {
                 int offset = 0;
-                Core.YoloSerializer.SerializeWithoutSizeCheck(player, patternBuffer, ref offset);
+                Core.GeneratedSerializerEntry.SerializeWithoutSizeCheck(player, patternBuffer, ref offset);
                 
                 offset = 0;
-                var result = Core.YoloSerializer.Deserialize<PlayerData>(patternBuffer, ref offset);
+                var result = Core.GeneratedSerializerEntry.Deserialize<PlayerData>(patternBuffer, ref offset);
             }
             patternWatch.Stop();
             
