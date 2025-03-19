@@ -1,0 +1,100 @@
+using System;
+using System.Buffers;
+using System.Buffers.Binary;
+using System.Collections.Generic;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Text;
+using YoloSerializer.Core;
+using YoloSerializer.Core.Models;
+using YoloSerializer.Core.Serializers;
+using YoloSerializer.Core.Contracts;
+
+namespace YoloSerializer.Core.Serializers
+{
+    /// <summary>
+    /// High-performance serializer for {{ class_name }} objects
+    /// </summary>
+    public sealed class {{ serializer_name }} : ISerializer<{{ full_type_name }}{{ nullable_marker }}>
+    {
+        private static readonly {{ serializer_name }} _instance = new {{ serializer_name }}();
+        
+        /// <summary>
+        /// Singleton instance for performance
+        /// </summary>
+        public static {{ serializer_name }} Instance => _instance;
+        
+        private {{ serializer_name }}() { }
+        
+        // Maximum size to allocate on stack
+        private const int MaxStackAllocSize = 1024;
+
+{{ if has_object_pool }}
+        // Object pooling to avoid allocations during deserialization
+        private static readonly ObjectPool<{{ class_name }}> _{{ class_variable_name }}Pool = 
+            new ObjectPool<{{ class_name }}>(() => new {{ class_name }}());
+{{ end }}
+            
+        // Shared empty array for optimization
+        private static readonly byte[] EmptyArray = Array.Empty<byte>();
+
+        /// <summary>
+        /// Gets the total size needed to serialize the {{ class_name }}
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public int GetSize({{ full_type_name }}{{ nullable_marker }} {{ instance_name }})
+        {
+{{ if is_nullable }}
+            if ({{ instance_name }} == null)
+                throw new ArgumentNullException(nameof({{ instance_name }}));
+{{ end }}
+            
+            int size = 0;
+            
+{{ for prop in properties }}
+            // Size of {{ prop.name }} ({{ prop.type }})
+            size += {{ prop.size_calculation }};
+{{ end }}
+            
+            return size;
+        }
+
+        /// <summary>
+        /// Serializes a {{ class_name }} object to a byte span
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Serialize({{ full_type_name }}{{ nullable_marker }} {{ instance_name }}, Span<byte> buffer, ref int offset)
+        {
+{{ if is_nullable }}
+            if ({{ instance_name }} == null)
+                throw new ArgumentNullException(nameof({{ instance_name }}));
+{{ end }}
+            
+{{ for prop in properties }}
+            // Serialize {{ prop.name }} ({{ prop.type }})
+            {{ prop.serialize_code }}
+{{ end }}
+        }
+
+        /// <summary>
+        /// Deserializes a {{ class_name }} object from a byte span
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Deserialize(out {{ full_type_name }}{{ nullable_marker }} value, ReadOnlySpan<byte> buffer, ref int offset)
+        {
+{{ if has_object_pool }}
+            // Get a {{ class_name }} instance from pool
+            var {{ instance_name }} = _{{ class_variable_name }}Pool.Get();
+{{ else }}
+            var {{ instance_name }} = new {{ class_name }}();
+{{ end }}
+
+{{ for prop in properties }}
+            // Read {{ prop.name }}
+            {{ prop.deserialize_code }}
+{{ end }}
+
+            value = {{ instance_name }};
+        }
+    }
+} 

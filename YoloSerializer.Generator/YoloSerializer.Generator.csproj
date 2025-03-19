@@ -8,11 +8,21 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="Templates\SerializerTemplate.scriban" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Scriban" Version="6.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\YoloSerializer.Tests\YoloSerializer.Tests.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Templates\SerializerTemplate.scriban">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Resource>
   </ItemGroup>
 
 </Project>

@@ -13,43 +13,6 @@ using YoloSerializer.Core.Contracts;
 namespace YoloSerializer.Core.Serializers
 {
     /// <summary>
-    /// Provides standard null handling for reference types
-    /// </summary>
-    public static class NullHandler
-    {
-        /// <summary>
-        /// Standard null marker value for all serializers
-        /// </summary>
-        public const int NullMarker = -1;
-        
-        /// <summary>
-        /// Writes a null marker if the value is null
-        /// </summary>
-        /// <returns>True if the value was null and a marker was written</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool WriteNullIfNeeded<T>(T? value, Span<byte> buffer, ref int offset) where T : class
-        {
-            if (value == null)
-            {
-                Int32Serializer.Instance.Serialize(NullMarker, buffer, ref offset);
-                return true;
-            }
-            return false;
-        }
-        
-        /// <summary>
-        /// Reads a null marker and returns whether the value was null
-        /// </summary>
-        /// <returns>True if the value was null</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool ReadAndCheckNull(ReadOnlySpan<byte> buffer, ref int offset, out int marker)
-        {
-            Int32Serializer.Instance.Deserialize(out marker, buffer, ref offset);
-            return marker == NullMarker;
-        }
-    }
-
-    /// <summary>
     /// High-performance serializer for PlayerData objects
     /// </summary>
     public sealed class PlayerDataSerializer : ISerializer<PlayerData?>
@@ -66,9 +29,11 @@ namespace YoloSerializer.Core.Serializers
         // Maximum size to allocate on stack
         private const int MaxStackAllocSize = 1024;
 
+
         // Object pooling to avoid allocations during deserialization
-        private static readonly ObjectPool<PlayerData> _playerPool = 
+        private static readonly ObjectPool<PlayerData> _playerDataPool = 
             new ObjectPool<PlayerData>(() => new PlayerData());
+
             
         // Shared empty array for optimization
         private static readonly byte[] EmptyArray = Array.Empty<byte>();
@@ -77,42 +42,37 @@ namespace YoloSerializer.Core.Serializers
         /// Gets the total size needed to serialize the PlayerData
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int GetSize(PlayerData? player)
+        public int GetSize(PlayerData? playerData)
         {
-            if (player == null)
-                return sizeof(int); // Just a null marker
-                
+
+            if (playerData == null)
+                throw new ArgumentNullException(nameof(playerData));
+
+            
             int size = 0;
             
-            // Size of PlayerId (int)
-            size += Int32Serializer.Instance.GetSize(player.PlayerId);
-            
-            // Size of PlayerName (string)
-            size += StringSerializer.Instance.GetSize(player.PlayerName);
-            
-            // Size of Health (int)
-            size += Int32Serializer.Instance.GetSize(player.Health);
-            
-            // Size of Position (Position)
-            size += PositionSerializer.Instance.GetSize(player.Position);
-            
-            // Size of IsActive (bool)
-            size += BooleanSerializer.Instance.GetSize(player.IsActive);
 
-            // Size of Achievements list
-            size += Int32Serializer.Instance.GetSize(player.Achievements.Count); // Count
-            foreach (var achievement in player.Achievements)
-            {
-                size += StringSerializer.Instance.GetSize(achievement);
-            }
-            
-            // Size of Stats dictionary
-            size += Int32Serializer.Instance.GetSize(player.Stats.Count); // Count
-            foreach (var kvp in player.Stats)
-            {
-                size += StringSerializer.Instance.GetSize(kvp.Key);
-                size += Int32Serializer.Instance.GetSize(kvp.Value);
-            }
+            // Size of PlayerId (int)
+            size += Int32Serializer.Instance.GetSize(playerData.PlayerId);
+
+            // Size of PlayerName (string)
+            size += StringSerializer.Instance.GetSize(playerData.PlayerName);
+
+            // Size of Health (int)
+            size += Int32Serializer.Instance.GetSize(playerData.Health);
+
+            // Size of Position (Position)
+            size += PositionSerializer.Instance.GetSize(playerData.Position);
+
+            // Size of IsActive (bool)
+            size += BooleanSerializer.Instance.GetSize(playerData.IsActive);
+
+            // Size of Achievements (List<string>)
+            size += Int32Serializer.Instance.GetSize(playerData.Achievements.Count) + playerData.Achievements.Sum(listItem => StringSerializer.Instance.GetSize(listItem));
+
+            // Size of Stats (Dictionary<string, int>)
+            size += Int32Serializer.Instance.GetSize(playerData.Stats.Count) + playerData.Stats.Sum(kvp => StringSerializer.Instance.GetSize(kvp.Key) + Int32Serializer.Instance.GetSize(kvp.Value));
+
             
             return size;
         }
@@ -121,41 +81,44 @@ namespace YoloSerializer.Core.Serializers
         /// Serializes a PlayerData object to a byte span
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Serialize(PlayerData? player, Span<byte> buffer, ref int offset)
+        public void Serialize(PlayerData? playerData, Span<byte> buffer, ref int offset)
         {
-            // Handle null case with standard pattern
-            if (NullHandler.WriteNullIfNeeded(player, buffer, ref offset))
-                return;
+
+            if (playerData == null)
+                throw new ArgumentNullException(nameof(playerData));
+
             
+
             // Serialize PlayerId (int)
-            Int32Serializer.Instance.Serialize(player.PlayerId, buffer, ref offset);
-            
+            Int32Serializer.Instance.Serialize(playerData.PlayerId, buffer, ref offset);
+
             // Serialize PlayerName (string)
-            StringSerializer.Instance.Serialize(player.PlayerName, buffer, ref offset);
-            
+            StringSerializer.Instance.Serialize(playerData.PlayerName, buffer, ref offset);
+
             // Serialize Health (int)
-            Int32Serializer.Instance.Serialize(player.Health, buffer, ref offset);
-            
-            // Serialize Position using PositionSerializer
-            PositionSerializer.Instance.Serialize(player.Position, buffer, ref offset);
-            
+            Int32Serializer.Instance.Serialize(playerData.Health, buffer, ref offset);
+
+            // Serialize Position (Position)
+            PositionSerializer.Instance.Serialize(playerData.Position, buffer, ref offset);
+
             // Serialize IsActive (bool)
-            BooleanSerializer.Instance.Serialize(player.IsActive, buffer, ref offset);
-            
-            // Serialize Achievements list
-            Int32Serializer.Instance.Serialize(player.Achievements.Count, buffer, ref offset);
-            foreach (var achievement in player.Achievements)
-            {
-                StringSerializer.Instance.Serialize(achievement, buffer, ref offset);
-            }
-            
-            // Serialize Stats dictionary
-            Int32Serializer.Instance.Serialize(player.Stats.Count, buffer, ref offset);
-            foreach (var kvp in player.Stats)
-            {
-                StringSerializer.Instance.Serialize(kvp.Key, buffer, ref offset);
-                Int32Serializer.Instance.Serialize(kvp.Value, buffer, ref offset);
-            }
+            BooleanSerializer.Instance.Serialize(playerData.IsActive, buffer, ref offset);
+
+            // Serialize Achievements (List<string>)
+            Int32Serializer.Instance.Serialize(playerData.Achievements.Count, buffer, ref offset);
+                        foreach (var listItem in playerData.Achievements)
+                        {
+                            StringSerializer.Instance.Serialize(listItem, buffer, ref offset);
+                        }
+
+            // Serialize Stats (Dictionary<string, int>)
+            Int32Serializer.Instance.Serialize(playerData.Stats.Count, buffer, ref offset);
+                        foreach (var kvp in playerData.Stats)
+                        {
+                            StringSerializer.Instance.Serialize(kvp.Key, buffer, ref offset);
+                            Int32Serializer.Instance.Serialize(kvp.Value, buffer, ref offset);
+                        }
+
         }
 
         /// <summary>
@@ -164,55 +127,53 @@ namespace YoloSerializer.Core.Serializers
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Deserialize(out PlayerData? value, ReadOnlySpan<byte> buffer, ref int offset)
         {
-            // Check for null with standard pattern
-            if (NullHandler.ReadAndCheckNull(buffer, ref offset, out int playerId))
-            {
-                value = null;
-                return;
-            }
 
             // Get a PlayerData instance from pool
-            var player = _playerPool.Get();
+            var playerData = _playerDataPool.Get();
 
-            // First int was actually the PlayerId
-            player.PlayerId = playerId;
-            
+
+
+            // Read PlayerId
+            Int32Serializer.Instance.Deserialize(out int _local_playerId, buffer, ref offset);
+                        playerData.PlayerId = _local_playerId;
+
             // Read PlayerName
-            StringSerializer.Instance.Deserialize(out string? playerName, buffer, ref offset);
-            player.PlayerName = playerName;
-            
-            // Read Health
-            Int32Serializer.Instance.Deserialize(out int health, buffer, ref offset);
-            player.Health = health;
-            
-            // Read Position
-            PositionSerializer.Instance.Deserialize(out Position position, buffer, ref offset);
-            player.Position = position;
-            
-            // Read IsActive
-            BooleanSerializer.Instance.Deserialize(out bool isActive, buffer, ref offset);
-            player.IsActive = isActive;
-            
-            // Read Achievements list
-            Int32Serializer.Instance.Deserialize(out int achievementsCount, buffer, ref offset);
-            player.Achievements.Clear();
-            for (int i = 0; i < achievementsCount; i++)
-            {
-                StringSerializer.Instance.Deserialize(out string? achievement, buffer, ref offset);
-                player.Achievements.Add(achievement);
-            }
-            
-            // Read Stats dictionary
-            Int32Serializer.Instance.Deserialize(out int statsCount, buffer, ref offset);
-            player.Stats.Clear();
-            for (int i = 0; i < statsCount; i++)
-            {
-                StringSerializer.Instance.Deserialize(out string? key, buffer, ref offset);
-                Int32Serializer.Instance.Deserialize(out int statValue, buffer, ref offset);
-                player.Stats[key] = statValue;
-            }
+            StringSerializer.Instance.Deserialize(out string? _local_playerName, buffer, ref offset);
+                        playerData.PlayerName = _local_playerName;
 
-            value = player;
+            // Read Health
+            Int32Serializer.Instance.Deserialize(out int _local_health, buffer, ref offset);
+                        playerData.Health = _local_health;
+
+            // Read Position
+            PositionSerializer.Instance.Deserialize(out Position? _local_position, buffer, ref offset);
+                        playerData.Position = _local_position;
+
+            // Read IsActive
+            BooleanSerializer.Instance.Deserialize(out bool _local_isActive, buffer, ref offset);
+                        playerData.IsActive = _local_isActive;
+
+            // Read Achievements
+            Int32Serializer.Instance.Deserialize(out int _local_achievementsCount, buffer, ref offset);
+                        playerData.Achievements.Clear();
+                        for (int i = 0; i < _local_achievementsCount; i++)
+                        {
+                            StringSerializer.Instance.Deserialize(out string listItem, buffer, ref offset);
+                            playerData.Achievements.Add(listItem);
+                        }
+
+            // Read Stats
+            Int32Serializer.Instance.Deserialize(out int _local_statsCount, buffer, ref offset);
+                        playerData.Stats.Clear();
+                        for (int i = 0; i < _local_statsCount; i++)
+                        {
+                            StringSerializer.Instance.Deserialize(out string key, buffer, ref offset);
+                            Int32Serializer.Instance.Deserialize(out int dictValue, buffer, ref offset);
+                            playerData.Stats[key] = dictValue;
+                        }
+
+
+            value = playerData;
         }
     }
-} 
+}

@@ -40,7 +40,7 @@ namespace YoloSerializer.Tests
             // Act - serialize
             serializer.Serialize(original, buffer, ref offset);
             
-            // Verify offset advancement
+            // Verify offset advancement matches size
             Assert.Equal(size, offset);
             
             // Reset offset for deserialization
@@ -62,7 +62,6 @@ namespace YoloSerializer.Tests
         [Fact]
         public void YoloSerializer_ShouldHandleNull()
         {
-   
             // Arrange
             PlayerData? original = null;
             var serializer = YoloGeneratedSerializer.Instance;
@@ -97,7 +96,8 @@ namespace YoloSerializer.Tests
             var playerSerializer = PlayerDataSerializer.Instance;
             var entrySerializer = YoloGeneratedSerializer.Instance;
             
-            int directSize = playerSerializer.GetSize(player) + sizeof(byte); // Add byte for type ID
+            // Add type ID byte for the PlayerData object itself
+            int directSize = playerSerializer.GetSize(player) + sizeof(byte);
             int yoloSize = entrySerializer.GetSerializedSize(player);
             
             // Assert - Compare sizes
@@ -125,6 +125,7 @@ namespace YoloSerializer.Tests
             int directSize = playerSerializer.GetSize(player);
             int patternSize = entrySerializer.GetSerializedSize(player);
             
+            // Adjust directBuffer size to account for type IDs
             var directBuffer = new byte[directSize];
             var patternBuffer = new byte[patternSize];
             
@@ -213,7 +214,7 @@ namespace YoloSerializer.Tests
             // Act - serialize
             serializer.Serialize(original, buffer, ref offset);
             
-            // Verify offset advancement
+            // Verify offset advancement matches size
             Assert.Equal(size, offset);
             
             // Reset offset for deserialization

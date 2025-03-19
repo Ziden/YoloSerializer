@@ -117,6 +117,15 @@ namespace YoloSerializer.Tests
             Assert.NotNull(result);
             Assert.Empty(result.Achievements);
             Assert.Empty(result.Stats);
+            
+            // Check basic properties are still correct
+            Assert.Equal(original.PlayerId, result.PlayerId);
+            Assert.Equal(original.PlayerName, result.PlayerName);
+            Assert.Equal(original.Health, result.Health);
+            Assert.Equal(original.Position.X, result.Position.X);
+            Assert.Equal(original.Position.Y, result.Position.Y);
+            Assert.Equal(original.Position.Z, result.Position.Z);
+            Assert.Equal(original.IsActive, result.IsActive);
         }
         
         // ... rest of existing code ...

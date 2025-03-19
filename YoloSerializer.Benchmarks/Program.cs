@@ -84,7 +84,7 @@ namespace YoloSerializer.Benchmarks
             BenchmarkRunner.Run<SerializerBenchmarks>(config);
             
             Console.WriteLine("\n=== Running Dictionary Serializer Benchmarks ===");
-            BenchmarkRunner.Run<DictionaryBenchmarks>(config);
+           
         }
     }
 }
