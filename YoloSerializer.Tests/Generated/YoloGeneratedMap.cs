@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using YoloSerializer.Core.Contracts;
 using YoloSerializer.Core.Models;
 using YoloSerializer.Core.Serializers;
+using YoloSerializer.Tests.Generated;
 
 namespace YoloSerializer.Tests.Generated
 {
@@ -30,19 +31,19 @@ namespace YoloSerializer.Tests.Generated
 
         #region codegen
         /// <summary>
-        /// Type ID for AllTypesData
-        /// </summary>
-        public const byte ALLTYPESDATA_TYPE_ID = 1;
-        
-        /// <summary>
         /// Type ID for PlayerData
         /// </summary>
-        public const byte PLAYERDATA_TYPE_ID = 2;
+        public const byte PLAYERDATA_TYPE_ID = 1;
         
         /// <summary>
         /// Type ID for Position
         /// </summary>
-        public const byte POSITION_TYPE_ID = 3;
+        public const byte POSITION_TYPE_ID = 2;
+        
+        /// <summary>
+        /// Type ID for AllTypesData
+        /// </summary>
+        public const byte ALLTYPESDATA_TYPE_ID = 3;
         
         #endregion
         
@@ -55,19 +56,19 @@ namespace YoloSerializer.Tests.Generated
         /// Gets the type ID for a type
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public byte GetTypeId<T>() where T : class, IYoloSerializable
+        public byte GetTypeId<T>()
         {
             Type type = typeof(T);
 
             #region codegen
-            if (type == typeof(AllTypesData))
-                return ALLTYPESDATA_TYPE_ID;
-                
             if (type == typeof(PlayerData))
                 return PLAYERDATA_TYPE_ID;
                 
             if (type == typeof(Position))
                 return POSITION_TYPE_ID;
+                
+            if (type == typeof(AllTypesData))
+                return ALLTYPESDATA_TYPE_ID;
                 
             #endregion
             throw new ArgumentException($"Unknown type: {type.Name}");
@@ -77,20 +78,20 @@ namespace YoloSerializer.Tests.Generated
         /// Serializes an object to a byte span without boxing
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Serialize<T>(T obj, Span<byte> buffer, ref int offset) where T : class, IYoloSerializable
+        public void Serialize<T>(T obj, Span<byte> buffer, ref int offset)
         {
             switch (obj)
             {
-                case AllTypesData allTypesData:
-                    AllTypesDataSerializer.Instance.Serialize(allTypesData, buffer, ref offset);
-                    break;
-                
                 case PlayerData playerData:
                     PlayerDataSerializer.Instance.Serialize(playerData, buffer, ref offset);
                     break;
                 
                 case Position position:
                     PositionSerializer.Instance.Serialize(position, buffer, ref offset);
+                    break;
+                
+                case AllTypesData allTypesData:
+                    AllTypesDataSerializer.Instance.Serialize(allTypesData, buffer, ref offset);
                     break;
                 
                 default:
@@ -102,18 +103,18 @@ namespace YoloSerializer.Tests.Generated
         /// Gets the serialized size of an object without boxing
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int GetSerializedSize<T>(T obj) where T : class, IYoloSerializable
+        public int GetSerializedSize<T>(T obj)
         {
             switch (obj)
             {
-                case AllTypesData allTypesData:
-                    return AllTypesDataSerializer.Instance.GetSize(allTypesData);
-                
                 case PlayerData playerData:
                     return PlayerDataSerializer.Instance.GetSize(playerData);
                 
                 case Position position:
                     return PositionSerializer.Instance.GetSize(position);
+                
+                case AllTypesData allTypesData:
+                    return AllTypesDataSerializer.Instance.GetSize(allTypesData);
                 
                 default:
                     throw new ArgumentException($"Unknown type: {obj.GetType().Name}");
@@ -128,11 +129,6 @@ namespace YoloSerializer.Tests.Generated
         {
             switch (typeId)
             {
-                case ALLTYPESDATA_TYPE_ID:
-                    AllTypesData? allTypesDataResult;
-                    AllTypesDataSerializer.Instance.Deserialize(out allTypesDataResult, buffer, ref offset);
-                    return allTypesDataResult;
-                
                 case PLAYERDATA_TYPE_ID:
                     PlayerData? playerDataResult;
                     PlayerDataSerializer.Instance.Deserialize(out playerDataResult, buffer, ref offset);
@@ -142,6 +138,11 @@ namespace YoloSerializer.Tests.Generated
                     Position? positionResult;
                     PositionSerializer.Instance.Deserialize(out positionResult, buffer, ref offset);
                     return positionResult;
+                
+                case ALLTYPESDATA_TYPE_ID:
+                    AllTypesData? allTypesDataResult;
+                    AllTypesDataSerializer.Instance.Deserialize(out allTypesDataResult, buffer, ref offset);
+                    return allTypesDataResult;
                 
                 default:
                     throw new ArgumentException($"Unknown type ID: {typeId}");

@@ -6,7 +6,7 @@ namespace YoloSerializer.Core.Models
     /// <summary>
     /// Represents a 3D position in the game world
     /// </summary>
-    public class Position : IYoloSerializable
+    public class Position
     {
         public float X { get; set; }
         public float Y { get; set; }

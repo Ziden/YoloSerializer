@@ -50,18 +50,13 @@ namespace YoloSerializer.Core.Serializers
 
             
             int size = 0;
-            
-
             // Size of X (float)
             size += FloatSerializer.Instance.GetSize(position.X);
-
-            // Size of Y (float)
+                        // Size of Y (float)
             size += FloatSerializer.Instance.GetSize(position.Y);
-
-            // Size of Z (float)
+                        // Size of Z (float)
             size += FloatSerializer.Instance.GetSize(position.Z);
 
-            
             return size;
         }
 
@@ -75,17 +70,12 @@ namespace YoloSerializer.Core.Serializers
             if (position == null)
                 throw new ArgumentNullException(nameof(position));
 
-            
-
             // Serialize X (float)
             FloatSerializer.Instance.Serialize(position.X, buffer, ref offset);
-
-            // Serialize Y (float)
+                        // Serialize Y (float)
             FloatSerializer.Instance.Serialize(position.Y, buffer, ref offset);
-
-            // Serialize Z (float)
+                        // Serialize Z (float)
             FloatSerializer.Instance.Serialize(position.Z, buffer, ref offset);
-
         }
 
         /// <summary>
@@ -99,19 +89,15 @@ namespace YoloSerializer.Core.Serializers
             var position = _positionPool.Get();
 
 
-
             // Read X
             FloatSerializer.Instance.Deserialize(out float _local_x, buffer, ref offset);
                         position.X = _local_x;
-
-            // Read Y
+                        // Read Y
             FloatSerializer.Instance.Deserialize(out float _local_y, buffer, ref offset);
                         position.Y = _local_y;
-
-            // Read Z
+                        // Read Z
             FloatSerializer.Instance.Deserialize(out float _local_z, buffer, ref offset);
                         position.Z = _local_z;
-
 
             value = position;
         }

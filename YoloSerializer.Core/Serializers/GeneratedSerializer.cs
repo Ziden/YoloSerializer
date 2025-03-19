@@ -14,21 +14,21 @@ namespace YoloSerializer.Core.Serializers
         /// Type ID used for null values
         /// </summary>
         byte NullTypeId { get; }
-        
+
         /// <summary>
         /// Gets the type ID for a type
         /// </summary>
-        byte GetTypeId<T>() where T : class, IYoloSerializable;
-        
+        byte GetTypeId<T>();
+
         /// <summary>
         /// Serializes an object to a byte span
         /// </summary>
-        void Serialize<T>(T obj, Span<byte> buffer, ref int offset) where T : class, IYoloSerializable;
-        
+        void Serialize<T>(T obj, Span<byte> buffer, ref int offset);
+
         /// <summary>
         /// Gets the serialized size of an object
         /// </summary>
-        int GetSerializedSize<T>(T obj) where T : class, IYoloSerializable;
+        int GetSerializedSize<T>(T obj);
         
         /// <summary>
         /// Deserializes an object based on a type ID
@@ -56,7 +56,7 @@ namespace YoloSerializer.Core.Serializers
         /// Serializes an object to a byte span
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Serialize<T>(T? obj, Span<byte> buffer, ref int offset) where T : class, IYoloSerializable
+        public void Serialize<T>(T obj, Span<byte> buffer, ref int offset) 
         {
             // Handle null case
             if (obj == null)
@@ -73,12 +73,12 @@ namespace YoloSerializer.Core.Serializers
             // Delegate to the type map for type-specific serialization
             _typeMap.Serialize(obj, buffer, ref offset);
         }
-        
+
         /// <summary>
         /// Serializes an object to a byte span with pre-computed size
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void SerializeWithoutSizeCheck<T>(T? obj, Span<byte> buffer, ref int offset) where T : class, IYoloSerializable
+        public void SerializeWithoutSizeCheck<T>(T obj, Span<byte> buffer, ref int offset)
         {
             // Handle null case
             if (obj == null)
@@ -118,7 +118,7 @@ namespace YoloSerializer.Core.Serializers
         /// Deserializes an object from a byte span with strong typing
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public T? Deserialize<T>(ReadOnlySpan<byte> buffer, ref int offset) where T : class, IYoloSerializable
+        public T Deserialize<T>(ReadOnlySpan<byte> buffer, ref int offset)
         {
             // Ensure we have at least a byte for the type ID
             EnsureBufferSize(buffer, offset, sizeof(byte));
@@ -128,7 +128,7 @@ namespace YoloSerializer.Core.Serializers
             
             // Check for null
             if (typeId == _typeMap.NullTypeId)
-                return null;
+                return default!;
 
             // Delegate to the type map for deserialization
             object? result = _typeMap.DeserializeById(typeId, buffer, ref offset);
@@ -144,7 +144,7 @@ namespace YoloSerializer.Core.Serializers
         /// Gets the serialized size of an object
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int GetSerializedSize<T>(T? obj) where T : class, IYoloSerializable
+        public int GetSerializedSize<T>(T obj) 
         {
             // Handle null case
             if (obj == null)

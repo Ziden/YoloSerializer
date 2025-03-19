@@ -6,7 +6,7 @@ namespace YoloSerializer.Core.Models
     /// <summary>
     /// Test model that contains all supported primitive types
     /// </summary>
-    public class AllTypesData : IYoloSerializable
+    public class AllTypesData
     {
         // Original primitive types
         public int Int32Value { get; set; }

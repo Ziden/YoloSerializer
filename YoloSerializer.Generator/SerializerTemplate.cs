@@ -41,7 +41,7 @@ namespace YoloSerializer.Core.Serializers
         // Maximum size to allocate on stack
         private const int MaxStackAllocSize = 1024;
 
-{{ if has_object_pool }}
+{{ if is_class }}
         // Object pooling to avoid allocations during deserialization
         private static readonly ObjectPool<{{ class_name }}> _{{ class_variable_name }}Pool = 
             new ObjectPool<{{ class_name }}>(() => new {{ class_name }}());
@@ -54,20 +54,16 @@ namespace YoloSerializer.Core.Serializers
         /// Gets the total size needed to serialize the {{ class_name }}
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int GetSize({{ full_type_name }}{{ nullable_marker }} {{ instance_name }})
+        public int GetSize({{ full_type_name }}{{ nullable_marker }} {{ instance_var_name }})
         {
-{{ if is_nullable }}
-            if ({{ instance_name }} == null)
-                throw new ArgumentNullException(nameof({{ instance_name }}));
+{{ if needs_null_check }}
+            if ({{ instance_var_name }} == null)
+                throw new ArgumentNullException(nameof({{ instance_var_name }}));
 {{ end }}
             
             int size = 0;
-            
-{{ for prop in properties }}
-            // Size of {{ prop.name }} ({{ prop.type }})
-            size += {{ prop.size_calculation }};
-{{ end }}
-            
+            {{ size_calculation }}
+
             return size;
         }
 
@@ -75,17 +71,13 @@ namespace YoloSerializer.Core.Serializers
         /// Serializes a {{ class_name }} object to a byte span
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Serialize({{ full_type_name }}{{ nullable_marker }} {{ instance_name }}, Span<byte> buffer, ref int offset)
+        public void Serialize({{ full_type_name }}{{ nullable_marker }} {{ instance_var_name }}, Span<byte> buffer, ref int offset)
         {
-{{ if is_nullable }}
-            if ({{ instance_name }} == null)
-                throw new ArgumentNullException(nameof({{ instance_name }}));
+{{ if needs_null_check }}
+            if ({{ instance_var_name }} == null)
+                throw new ArgumentNullException(nameof({{ instance_var_name }}));
 {{ end }}
-            
-{{ for prop in properties }}
-            // Serialize {{ prop.name }} ({{ prop.type }})
-            {{ prop.serialize_code }}
-{{ end }}
+            {{ serialize_code }}
         }
 
         /// <summary>
@@ -94,19 +86,16 @@ namespace YoloSerializer.Core.Serializers
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Deserialize(out {{ full_type_name }}{{ nullable_marker }} value, ReadOnlySpan<byte> buffer, ref int offset)
         {
-{{ if has_object_pool }}
+{{ if is_class }}
             // Get a {{ class_name }} instance from pool
-            var {{ instance_name }} = _{{ class_variable_name }}Pool.Get();
+            var {{ instance_var_name }} = _{{ class_variable_name }}Pool.Get();
 {{ else }}
-            var {{ instance_name }} = new {{ class_name }}();
+            var {{ instance_var_name }} = new {{ class_name }}();
 {{ end }}
 
-{{ for prop in properties }}
-            // Read {{ prop.name }}
-            {{ prop.deserialize_code }}
-{{ end }}
+            {{ deserialize_code }}
 
-            value = {{ instance_name }};
+            value = {{ instance_var_name }};
         }
     }
 }";

@@ -5,7 +5,7 @@ namespace YoloSerializer.Core.Models
     /// <summary>
     /// Represents a player in the game
     /// </summary>
-    public class PlayerData : IYoloSerializable
+    public class PlayerData 
     {
         // Type ID is now managed by TypeRegistry
 

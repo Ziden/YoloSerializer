@@ -97,7 +97,7 @@ namespace YoloSerializer.Tests
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal(original.X, result!.X);
+            Assert.Equal(original.X, result.X);
             Assert.Equal(original.Y, result.Y);
             Assert.Equal(original.Z, result.Z);
             Assert.Equal(size, offset);
