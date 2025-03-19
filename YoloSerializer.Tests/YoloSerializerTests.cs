@@ -21,12 +21,7 @@ namespace YoloSerializer.Tests
         
         [Fact]
         public void YoloSerializer_ShouldSerializeAndDeserializePlayerData()
-        {
-            // Ensure types are registered for the test
-            TypeRegistry.Reset();
-            TypeRegistry.RegisterType<PlayerData>();
-            TypeRegistry.RegisterType<Position>();
-            
+        {            
             // Arrange
             var original = new PlayerData(
                 playerId: 42,
@@ -67,11 +62,7 @@ namespace YoloSerializer.Tests
         [Fact]
         public void YoloSerializer_ShouldHandleNull()
         {
-            // Ensure types are registered for the test
-            TypeRegistry.Reset();
-            TypeRegistry.RegisterType<PlayerData>();
-            TypeRegistry.RegisterType<Position>();
-            
+   
             // Arrange
             PlayerData? original = null;
             var serializer = YoloGeneratedSerializer.Instance;
@@ -92,12 +83,7 @@ namespace YoloSerializer.Tests
         
         [Fact]
         public void YoloSerializer_ShouldCalculateCorrectSize()
-        {
-            // Ensure types are registered for the test
-            TypeRegistry.Reset();
-            TypeRegistry.RegisterType<PlayerData>();
-            TypeRegistry.RegisterType<Position>();
-            
+        {       
             // Arrange - Create a test player with a known string
             var player = new PlayerData(
                 playerId: 42,
@@ -123,12 +109,7 @@ namespace YoloSerializer.Tests
         {
             // Arrange
             const int iterations = 100000; // Reduced to speed up test
-            
-            // Ensure types are registered for the test
-            TypeRegistry.Reset();
-            TypeRegistry.RegisterType<PlayerData>();
-            TypeRegistry.RegisterType<Position>();
-            
+                       
             var player = new PlayerData(
                 playerId: 42,
                 playerName: "TestPlayer with a somewhat longer name to make serialization work harder",
@@ -203,12 +184,7 @@ namespace YoloSerializer.Tests
 
         [Fact]
         public void YoloSerializer_ShouldSerializeAndDeserializeWithCollections()
-        {
-            // Ensure types are registered for the test
-            TypeRegistry.Reset();
-            TypeRegistry.RegisterType<PlayerData>();
-            TypeRegistry.RegisterType<Position>();
-            
+        {            
             // Arrange
             var original = new PlayerData(
                 playerId: 42,

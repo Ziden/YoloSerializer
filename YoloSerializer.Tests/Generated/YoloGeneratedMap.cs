@@ -27,7 +27,8 @@ namespace YoloSerializer.Tests.Generated
         /// Type ID used for null values
         /// </summary>
         public const byte NULL_TYPE_ID = 0;
-        
+
+        #region codegen
         /// <summary>
         /// Type ID for PlayerData
         /// </summary>
@@ -37,6 +38,7 @@ namespace YoloSerializer.Tests.Generated
         /// Type ID for Position
         /// </summary>
         public const byte POSITION_TYPE_ID = 2;
+        #endregion
         
         /// <summary>
         /// Gets the null type ID for the ITypeMap interface
@@ -50,13 +52,14 @@ namespace YoloSerializer.Tests.Generated
         public byte GetTypeId<T>() where T : class, IYoloSerializable
         {
             Type type = typeof(T);
-            
+
+            #region codegen
             if (type == typeof(PlayerData))
                 return PLAYER_DATA_TYPE_ID;
                 
             if (type == typeof(Position))
                 return POSITION_TYPE_ID;
-                
+            #endregion
             throw new ArgumentException($"Unknown type: {type.Name}");
         }
         
@@ -66,19 +69,19 @@ namespace YoloSerializer.Tests.Generated
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Serialize<T>(T obj, Span<byte> buffer, ref int offset) where T : class, IYoloSerializable
         {
-            if (obj is PlayerData playerData)
+            switch (obj)
             {
-                PlayerDataSerializer.Instance.Serialize(playerData, buffer, ref offset);
-                return;
+                case PlayerData playerData:
+                    PlayerDataSerializer.Instance.Serialize(playerData, buffer, ref offset);
+                    break;
+                
+                case Position position:
+                    PositionSerializer.Instance.Serialize(position, buffer, ref offset);
+                    break;
+                
+                default:
+                    throw new ArgumentException($"Unknown type: {obj.GetType().Name}");
             }
-            
-            if (obj is Position position)
-            {
-                PositionSerializer.Instance.Serialize(position, buffer, ref offset);
-                return;
-            }
-            
-            throw new ArgumentException($"Unknown type: {obj.GetType().Name}");
         }
         
         /// <summary>
@@ -87,13 +90,17 @@ namespace YoloSerializer.Tests.Generated
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int GetSerializedSize<T>(T obj) where T : class, IYoloSerializable
         {
-            if (obj is PlayerData playerData)
-                return PlayerDataSerializer.Instance.GetSize(playerData);
+            switch (obj)
+            {
+                case PlayerData playerData:
+                    return PlayerDataSerializer.Instance.GetSize(playerData);
                 
-            if (obj is Position position)
-                return PositionSerializer.Instance.GetSize(position);
+                case Position position:
+                    return PositionSerializer.Instance.GetSize(position);
                 
-            throw new ArgumentException($"Unknown type: {obj.GetType().Name}");
+                default:
+                    throw new ArgumentException($"Unknown type: {obj.GetType().Name}");
+            }
         }
         
         /// <summary>
@@ -102,34 +109,21 @@ namespace YoloSerializer.Tests.Generated
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public object? DeserializeById(byte typeId, ReadOnlySpan<byte> buffer, ref int offset)
         {
-            return typeId switch
+            switch (typeId)
             {
-                PLAYER_DATA_TYPE_ID => DeserializePlayerData(buffer, ref offset),
-                POSITION_TYPE_ID => DeserializePosition(buffer, ref offset),
-                _ => throw new ArgumentException($"Unknown type ID: {typeId}")
-            };
-        }
-        
-        /// <summary>
-        /// Helper method to deserialize PlayerData
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static PlayerData? DeserializePlayerData(ReadOnlySpan<byte> buffer, ref int offset)
-        {
-            PlayerData? result;
-            PlayerDataSerializer.Instance.Deserialize(out result, buffer, ref offset);
-            return result;
-        }
-        
-        /// <summary>
-        /// Helper method to deserialize Position
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static Position DeserializePosition(ReadOnlySpan<byte> buffer, ref int offset)
-        {
-            Position result;
-            PositionSerializer.Instance.Deserialize(out result, buffer, ref offset);
-            return result;
+                case PLAYER_DATA_TYPE_ID:
+                    PlayerData? playerResult;
+                    PlayerDataSerializer.Instance.Deserialize(out playerResult, buffer, ref offset);
+                    return playerResult;
+                
+                case POSITION_TYPE_ID:
+                    Position positionResult;
+                    PositionSerializer.Instance.Deserialize(out positionResult, buffer, ref offset);
+                    return positionResult;
+                
+                default:
+                    throw new ArgumentException($"Unknown type ID: {typeId}");
+            }
         }
     }
 } 
