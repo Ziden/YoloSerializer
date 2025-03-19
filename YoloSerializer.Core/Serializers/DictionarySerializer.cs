@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
-using YoloSerializer.Core.CodeGeneration.Generated;
 using YoloSerializer.Core.Contracts;
 
 namespace YoloSerializer.Core.Serializers

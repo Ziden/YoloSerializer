@@ -20,8 +20,17 @@ namespace YoloSerializer.Core
     /// <summary>
     /// High-performance serializer using pattern matching for optimal dispatch
     /// </summary>
-    public static class GeneratedSerializerEntry
+    public sealed class GeneratedSerializerEntry
     {
+        private static readonly GeneratedSerializerEntry _instance = new GeneratedSerializerEntry();
+        
+        /// <summary>
+        /// Singleton instance for performance
+        /// </summary>
+        public static GeneratedSerializerEntry Instance => _instance;
+        
+        private GeneratedSerializerEntry() { }
+        
         /// <summary>
         /// Type ID reserved for null values
         /// </summary>
@@ -31,7 +40,7 @@ namespace YoloSerializer.Core
         /// Serializes an object to a byte span
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Serialize<T>(T? obj, Span<byte> buffer, ref int offset) where T : class, IYoloSerializable
+        public void Serialize<T>(T? obj, Span<byte> buffer, ref int offset) where T : class, IYoloSerializable
         {
             // Handle null case
             if (obj == null)
@@ -48,7 +57,7 @@ namespace YoloSerializer.Core
             // Type-based dispatch using pattern matching
             if (obj is PlayerData playerData)
             {
-                PlayerDataSerializer.Serialize(playerData, buffer, ref offset);
+                PlayerDataSerializer.Instance.Serialize(playerData, buffer, ref offset);
             }
             else
             {
@@ -60,7 +69,7 @@ namespace YoloSerializer.Core
         /// Serializes an object to a byte span with pre-computed size
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void SerializeWithoutSizeCheck<T>(T? obj, Span<byte> buffer, ref int offset) where T : class, IYoloSerializable
+        public void SerializeWithoutSizeCheck<T>(T? obj, Span<byte> buffer, ref int offset) where T : class, IYoloSerializable
         {
             // Handle null case
             if (obj == null)
@@ -75,7 +84,7 @@ namespace YoloSerializer.Core
             // Type-based dispatch using pattern matching
             if (obj is PlayerData playerData)
             {
-                PlayerDataSerializer.Serialize(playerData, buffer, ref offset);
+                PlayerDataSerializer.Instance.Serialize(playerData, buffer, ref offset);
             }
             else
             {
@@ -87,7 +96,7 @@ namespace YoloSerializer.Core
         /// Deserializes an object from a byte span
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static object? Deserialize(ReadOnlySpan<byte> buffer, ref int offset)
+        public object? Deserialize(ReadOnlySpan<byte> buffer, ref int offset)
         {
             // Ensure we have at least a byte for the type ID
             EnsureBufferSize(buffer, offset, sizeof(byte));
@@ -103,17 +112,27 @@ namespace YoloSerializer.Core
             return typeId switch
             {
                 #region codegen
-                PlayerData.TYPE_ID => PlayerDataSerializer.Deserialize(buffer, ref offset),
+                PlayerData.TYPE_ID => DeserializePlayerData(buffer, ref offset),
                 _ => throw new InvalidOperationException($"Unknown type ID: {typeId}")
                 #endregion
             };
         }
         
         /// <summary>
+        /// Helper method to deserialize PlayerData
+        /// </summary>
+        private PlayerData? DeserializePlayerData(ReadOnlySpan<byte> buffer, ref int offset)
+        {
+            PlayerData? result;
+            PlayerDataSerializer.Instance.Deserialize(out result, buffer, ref offset);
+            return result;
+        }
+        
+        /// <summary>
         /// Deserializes an object from a byte span with strong typing
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static T? Deserialize<T>(ReadOnlySpan<byte> buffer, ref int offset) where T : class, IYoloSerializable
+        public T? Deserialize<T>(ReadOnlySpan<byte> buffer, ref int offset) where T : class, IYoloSerializable
         {
             // Ensure we have at least a byte for the type ID
             EnsureBufferSize(buffer, offset, sizeof(byte));
@@ -132,7 +151,7 @@ namespace YoloSerializer.Core
                 if (typeId != PlayerData.TYPE_ID)
                     throw new InvalidCastException($"Cannot deserialize type ID {typeId} as PlayerData");
                     
-                return (T)(object)PlayerDataSerializer.Deserialize(buffer, ref offset);
+                return (T)(object)DeserializePlayerData(buffer, ref offset);
             }
             #endregion
 
@@ -144,7 +163,7 @@ namespace YoloSerializer.Core
         /// Gets the serialized size of an object
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int GetSerializedSize<T>(T? obj) where T : class, IYoloSerializable
+        public int GetSerializedSize<T>(T? obj) where T : class, IYoloSerializable
         {
             // Handle null case
             if (obj == null)
@@ -154,7 +173,7 @@ namespace YoloSerializer.Core
             // Type ID byte + type-specific size
             if (obj is PlayerData playerData)
             {
-                return sizeof(byte) + playerData.GetSerializedSize();
+                return sizeof(byte) + PlayerDataSerializer.Instance.GetSize(playerData);
             }
             #endregion
 
@@ -165,7 +184,7 @@ namespace YoloSerializer.Core
         /// Ensures the buffer has enough space
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void EnsureBufferSize(Span<byte> buffer, int offset, int size)
+        private void EnsureBufferSize(Span<byte> buffer, int offset, int size)
         {
             if (buffer.Length - offset < size)
                 throw new ArgumentException($"Buffer too small. Needs at least {size} more bytes.");
@@ -175,7 +194,7 @@ namespace YoloSerializer.Core
         /// Ensures the buffer has enough space
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void EnsureBufferSize(ReadOnlySpan<byte> buffer, int offset, int size)
+        private void EnsureBufferSize(ReadOnlySpan<byte> buffer, int offset, int size)
         {
             if (buffer.Length - offset < size)
                 throw new ArgumentException($"Buffer too small. Needs at least {size} more bytes.");

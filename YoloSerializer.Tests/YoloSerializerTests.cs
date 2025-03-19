@@ -30,19 +30,20 @@ namespace YoloSerializer.Tests
             );
             
             // Calculate required buffer size
-            int size = Core.GeneratedSerializerEntry.GetSerializedSize(original);
+            var serializer = GeneratedSerializerEntry.Instance;
+            int size = serializer.GetSerializedSize(original);
             var buffer = new byte[size];
             int offset = 0;
 
             // Act - serialize
-            Core.GeneratedSerializerEntry.Serialize(original, buffer, ref offset);
+            serializer.Serialize(original, buffer, ref offset);
             
             // Verify offset advancement
             Assert.Equal(size, offset);
             
             // Reset offset for deserialization
             offset = 0;
-            var result = Core.GeneratedSerializerEntry.Deserialize<PlayerData>(buffer, ref offset);
+            var result = serializer.Deserialize<PlayerData>(buffer, ref offset);
 
             // Assert
             Assert.NotNull(result);
@@ -61,15 +62,16 @@ namespace YoloSerializer.Tests
         {
             // Arrange
             PlayerData? original = null;
+            var serializer = GeneratedSerializerEntry.Instance;
             var buffer = new byte[sizeof(byte)]; // Just enough for type ID marker
             int offset = 0;
 
             // Act - serialize
-            Core.GeneratedSerializerEntry.Serialize(original, buffer, ref offset);
+            serializer.Serialize(original, buffer, ref offset);
             
             // Reset offset for deserialization
             offset = 0;
-            var result = Core.GeneratedSerializerEntry.Deserialize<PlayerData>(buffer, ref offset);
+            var result = serializer.Deserialize<PlayerData>(buffer, ref offset);
 
             // Assert
             Assert.Null(result);
@@ -89,18 +91,21 @@ namespace YoloSerializer.Tests
             );
             
             // Act - Calculate the size using both methods
-            int directSize = player.GetSerializedSize() + sizeof(byte); // Add byte for type ID
-            int yoloSize = Core.GeneratedSerializerEntry.GetSerializedSize(player);
+            var playerSerializer = PlayerDataSerializer.Instance;
+            var entrySerializer = GeneratedSerializerEntry.Instance;
+            
+            int directSize = playerSerializer.GetSize(player) + sizeof(byte); // Add byte for type ID
+            int yoloSize = entrySerializer.GetSerializedSize(player);
             
             // Assert - Compare sizes
             Assert.Equal(directSize, yoloSize);
         }
         
         [Fact]
-        public void Benchmark_PatternMatchingVsExtensionMethods()
+        public void Benchmark_PatternMatchingVsDirectInstance()
         {
             // Arrange
-            const int iterations = 1000000;
+            const int iterations = 100000; // Reduced to speed up test
             var player = new PlayerData(
                 playerId: 42,
                 playerName: "TestPlayer with a somewhat longer name to make serialization work harder",
@@ -110,20 +115,23 @@ namespace YoloSerializer.Tests
             );
             
             // Pre-allocate buffers
-            int directSize = player.GetSerializedSize();
-            int patternSize = Core.GeneratedSerializerEntry.GetSerializedSize(player);
+            var playerSerializer = PlayerDataSerializer.Instance;
+            var entrySerializer = GeneratedSerializerEntry.Instance;
+            
+            int directSize = playerSerializer.GetSize(player);
+            int patternSize = entrySerializer.GetSerializedSize(player);
             
             var directBuffer = new byte[directSize];
             var patternBuffer = new byte[patternSize];
             
             // Warm up
-            for (int i = 0; i < 10000; i++)
+            for (int i = 0; i < 1000; i++)
             {
                 int offset = 0;
-                player.Serialize(directBuffer, ref offset);
+                playerSerializer.Serialize(player, directBuffer, ref offset);
                 
                 offset = 0;
-                Core.GeneratedSerializerEntry.Serialize(player, patternBuffer, ref offset);
+                entrySerializer.Serialize(player, patternBuffer, ref offset);
             }
             
             // Let the GC settle
@@ -131,15 +139,15 @@ namespace YoloSerializer.Tests
             GC.WaitForPendingFinalizers();
             GC.Collect();
             
-            // Benchmark direct extension method serialization
+            // Benchmark direct instance-based serialization
             var directWatch = System.Diagnostics.Stopwatch.StartNew();
             for (int i = 0; i < iterations; i++)
             {
                 int offset = 0;
-                player.Serialize(directBuffer, ref offset);
+                playerSerializer.Serialize(player, directBuffer, ref offset);
                 
                 offset = 0;
-                var result = PlayerDataSerializer.Deserialize(directBuffer, ref offset);
+                playerSerializer.Deserialize(out PlayerData? result, directBuffer, ref offset);
             }
             directWatch.Stop();
             
@@ -153,25 +161,21 @@ namespace YoloSerializer.Tests
             for (int i = 0; i < iterations; i++)
             {
                 int offset = 0;
-                Core.GeneratedSerializerEntry.SerializeWithoutSizeCheck(player, patternBuffer, ref offset);
+                entrySerializer.SerializeWithoutSizeCheck(player, patternBuffer, ref offset);
                 
                 offset = 0;
-                var result = Core.GeneratedSerializerEntry.Deserialize<PlayerData>(patternBuffer, ref offset);
+                var result = entrySerializer.Deserialize<PlayerData>(patternBuffer, ref offset);
             }
             patternWatch.Stop();
             
             // Output results
-            double directTime = directWatch.Elapsed.TotalMilliseconds;
-            double patternTime = patternWatch.Elapsed.TotalMilliseconds;
-            double ratio = patternTime / directTime;
-            
-            _output.WriteLine($"Direct Extension Method: {directTime:F2} ms ({iterations / directTime:F0} ops/ms)");
-            _output.WriteLine($"Pattern Matching: {patternTime:F2} ms ({iterations / patternTime:F0} ops/ms)");
-            _output.WriteLine($"Pattern matching overhead: {ratio:F2}x compared to direct");
+            _output.WriteLine($"Direct Instance: {directWatch.ElapsedMilliseconds} ms");
+            _output.WriteLine($"Pattern Matching: {patternWatch.ElapsedMilliseconds} ms");
+            _output.WriteLine($"Ratio: {(double)patternWatch.ElapsedMilliseconds / directWatch.ElapsedMilliseconds:F2}x");
             
             // This test is to measure performance, not pass/fail
-            Assert.True(directTime > 0);
-            Assert.True(patternTime > 0);
+            Assert.True(directWatch.ElapsedMilliseconds > 0);
+            Assert.True(patternWatch.ElapsedMilliseconds > 0);
         }
     }
 } 

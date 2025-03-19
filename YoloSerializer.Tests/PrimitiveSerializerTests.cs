@@ -14,16 +14,17 @@ namespace YoloSerializer.Tests
             int original = 42;
             byte[] buffer = new byte[sizeof(int)];
             int offset = 0;
+            var serializer = Int32Serializer.Instance;
 
             // Act
-            Int32Serializer.Serialize(original, buffer, ref offset);
+            serializer.Serialize(original, buffer, ref offset);
             
             offset = 0;
-            Int32Serializer.Deserialize(out int result, buffer, ref offset);
+            serializer.Deserialize(out int result, buffer, ref offset);
 
             // Assert
             Assert.Equal(original, result);
-            Assert.Equal(sizeof(int), Int32Serializer.GetSize(original));
+            Assert.Equal(sizeof(int), serializer.GetSize(original));
         }
 
         [Fact]
@@ -33,16 +34,17 @@ namespace YoloSerializer.Tests
             long original = 42L;
             byte[] buffer = new byte[sizeof(long)];
             int offset = 0;
+            var serializer = Int64Serializer.Instance;
 
             // Act
-            Int64Serializer.Serialize(original, buffer, ref offset);
+            serializer.Serialize(original, buffer, ref offset);
             
             offset = 0;
-            Int64Serializer.Deserialize(out long result, buffer, ref offset);
+            serializer.Deserialize(out long result, buffer, ref offset);
 
             // Assert
             Assert.Equal(original, result);
-            Assert.Equal(sizeof(long), Int64Serializer.GetSize(original));
+            Assert.Equal(sizeof(long), serializer.GetSize(original));
         }
 
         [Fact]
@@ -52,16 +54,17 @@ namespace YoloSerializer.Tests
             float original = 42.5f;
             byte[] buffer = new byte[sizeof(float)];
             int offset = 0;
+            var serializer = FloatSerializer.Instance;
 
             // Act
-            FloatSerializer.Serialize(original, buffer, ref offset);
+            serializer.Serialize(original, buffer, ref offset);
             
             offset = 0;
-            FloatSerializer.Deserialize(out float result, buffer, ref offset);
+            serializer.Deserialize(out float result, buffer, ref offset);
 
             // Assert
             Assert.Equal(original, result);
-            Assert.Equal(sizeof(float), FloatSerializer.GetSize(original));
+            Assert.Equal(sizeof(float), serializer.GetSize(original));
         }
 
         [Fact]
@@ -71,16 +74,17 @@ namespace YoloSerializer.Tests
             double original = 42.5;
             byte[] buffer = new byte[sizeof(double)];
             int offset = 0;
+            var serializer = DoubleSerializer.Instance;
 
             // Act
-            DoubleSerializer.Serialize(original, buffer, ref offset);
+            serializer.Serialize(original, buffer, ref offset);
             
             offset = 0;
-            DoubleSerializer.Deserialize(out double result, buffer, ref offset);
+            serializer.Deserialize(out double result, buffer, ref offset);
 
             // Assert
             Assert.Equal(original, result);
-            Assert.Equal(sizeof(double), DoubleSerializer.GetSize(original));
+            Assert.Equal(sizeof(double), serializer.GetSize(original));
         }
 
         [Fact]
@@ -90,16 +94,17 @@ namespace YoloSerializer.Tests
             bool original = true;
             byte[] buffer = new byte[sizeof(byte)];
             int offset = 0;
+            var serializer = BooleanSerializer.Instance;
 
             // Act
-            BooleanSerializer.Serialize(original, buffer, ref offset);
+            serializer.Serialize(original, buffer, ref offset);
             
             offset = 0;
-            BooleanSerializer.Deserialize(out bool result, buffer, ref offset);
+            serializer.Deserialize(out bool result, buffer, ref offset);
 
             // Assert
             Assert.Equal(original, result);
-            Assert.Equal(sizeof(byte), BooleanSerializer.GetSize(original));
+            Assert.Equal(sizeof(byte), serializer.GetSize(original));
         }
 
         [Fact]
@@ -107,19 +112,20 @@ namespace YoloSerializer.Tests
         {
             // Arrange
             string original = "Hello, World!";
-            int size = StringSerializer.GetSize(original);
+            var serializer = StringSerializer.Instance;
+            int size = serializer.GetSize(original);
             byte[] buffer = new byte[size];
             int offset = 0;
 
             // Act
-            StringSerializer.Serialize(original, buffer, ref offset);
+            serializer.Serialize(original, buffer, ref offset);
             
             offset = 0;
-            StringSerializer.Deserialize(out string result, buffer, ref offset);
+            serializer.Deserialize(out string result, buffer, ref offset);
 
             // Assert
             Assert.Equal(original, result);
-            Assert.Equal(sizeof(int) + Encoding.UTF8.GetByteCount(original), StringSerializer.GetSize(original));
+            Assert.Equal(sizeof(int) + Encoding.UTF8.GetByteCount(original), serializer.GetSize(original));
         }
 
         [Fact]
@@ -127,34 +133,35 @@ namespace YoloSerializer.Tests
         {
             // Arrange
             string original = null;
-            int size = StringSerializer.GetSize(original);
+            var serializer = StringSerializer.Instance;
+            int size = serializer.GetSize(original);
             byte[] buffer = new byte[size];
             int offset = 0;
 
             // Act
-            StringSerializer.Serialize(original, buffer, ref offset);
+            serializer.Serialize(original, buffer, ref offset);
             
             offset = 0;
-            StringSerializer.Deserialize(out string result, buffer, ref offset);
+            serializer.Deserialize(out string result, buffer, ref offset);
 
             // Assert
             Assert.Null(result);
-            Assert.Equal(sizeof(int), StringSerializer.GetSize(original));
+            Assert.Equal(sizeof(int), serializer.GetSize(original));
         }
 
-        // Note: ArraySerializer tests need to be updated to use the new generic approach
+        // Note: ArraySerializer tests need to be updated to use the new approach
         // These tests are commented out until they can be properly implemented
         /*
         [Fact]
         public void ArraySerializer_ShouldSerializeAndDeserialize()
         {
-            // To be implemented with new static API
+            // To be implemented with the instance-based API
         }
 
         [Fact]
         public void ArraySerializer_ShouldHandleNull()
         {
-            // To be implemented with new static API
+            // To be implemented with the instance-based API
         }
         */
     }
