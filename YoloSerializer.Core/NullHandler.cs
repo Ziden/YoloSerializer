@@ -5,17 +5,17 @@ using YoloSerializer.Core.Serializers;
 namespace YoloSerializer.Core
 {
     /// <summary>
-    /// Provides standard null handling for reference types
+    /// Provides standardized null handling for reference types with consistent marker values
     /// </summary>
     public static class NullHandler
     {
         /// <summary>
-        /// Standard null marker value for all serializers
+        /// Standard null marker value used consistently across all serializers
         /// </summary>
         public const int NullMarker = -1;
         
         /// <summary>
-        /// Writes a null marker if the value is null
+        /// Writes a null marker if the value is null, optimized for inlining
         /// </summary>
         /// <returns>True if the value was null and a marker was written</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -30,7 +30,7 @@ namespace YoloSerializer.Core
         }
         
         /// <summary>
-        /// Reads a null marker and returns whether the value was null
+        /// Reads a null marker and determines if the value was null, optimized for inlining
         /// </summary>
         /// <returns>True if the value was null</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
