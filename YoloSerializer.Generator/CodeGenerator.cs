@@ -81,8 +81,13 @@ namespace YoloSerializer.Generator
             { typeof(Guid), ("GuidSerializer", "Guid") }
         };
 
-        public async Task GenerateSerializers(List<Type> serializableTypes, Template template, GeneratorConfig config)
+        public async Task GenerateSerializers(List<Type> serializableTypes, GeneratorConfig config)
         {
+
+            // Parse the serializer template
+            string templateContent = SerializerTemplate.GetSerializerTemplate();
+            var template = Template.Parse(templateContent);
+
             _serializableTypes = serializableTypes.ToArray();
             _config = config;
 

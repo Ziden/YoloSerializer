@@ -28,10 +28,6 @@ public class Program
         Console.WriteLine($"Output path: {config.OutputPath}");
         Console.WriteLine($"Force regeneration: {config.ForceRegeneration}");
 
-        // Parse the serializer template
-        string templateContent = SerializerTemplate.GetSerializerTemplate();
-        var template = Template.Parse(templateContent);
-
         // Get list of serializable types
         var serializableTypes = ExplicitSerializableTypes.ToList();
         Console.WriteLine($"Found {serializableTypes.Count} serializable types");
@@ -39,7 +35,7 @@ public class Program
         // Generate all required files
         var generator = new CodeGenerator();
         config.ForceRegeneration = true;
-        await generator.GenerateSerializers(serializableTypes, template, config);
+        await generator.GenerateSerializers(serializableTypes, config);
 
         Console.WriteLine("Done!");
     }

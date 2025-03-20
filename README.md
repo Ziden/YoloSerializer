@@ -1,110 +1,188 @@
 # YoloSerializer
 
-A high-performance, zero-copy serializer for .NET Standard 2.1 with IL2CPP compatibility. Perfect for Unity projects that need fast serialization without reflection.
+A high-performance, zero-copy binary serialization library for .NET with IL2CPP compatibility. YoloSerializer uses compile-time code generation to create specialized serializers, avoiding reflection and delivering exceptional performance.
 
-## Features
+## Key Features
 
-- Zero-copy serialization using `Span<T>`
-- IL2CPP compatible (no reflection)
-- Source generator for automatic serialization code
-- Support for primitive types and nested objects
-- Null value handling
-- High performance with minimal allocations
-- Compatible with .NET Standard 2.1 and .NET Core 8
+- **High Performance**: Outperforms many established serializers like MessagePack in benchmarks
+- **Zero-Copy**: Uses `Span<T>` for buffer manipulation to minimize heap allocations
+- **Compile-Time Generation**: Creates specialized serializers without runtime reflection
+- **IL2CPP Compatible**: Perfect for Unity projects with AOT compilation requirements
+- **Compact Binary Format**: Efficient binary representation with optimized size
+- **Advanced Null Handling**: Efficient bitset-based approach for nullable fields
+- **Collection Support**: Native support for Lists, Dictionaries, and Arrays
+- **Object Pooling**: Reduces GC pressure during deserialization
+- **Aggressive Inlining**: Performance optimization for hot code paths
+
+## Comparison to Other Serializers
+
+| Feature | YoloSerializer | MessagePack | Protobuf | JSON.NET | BinaryFormatter |
+|---------|---------------|-------------|----------|----------|-----------------|
+| Format | Binary | Binary | Binary | Text | Binary |
+| Performance | Excellent | Very Good | Good | Moderate | Poor |
+| Memory Usage | Minimal | Low | Low | High | High |
+| IL2CPP Compatible | ✅ | ⚠️ | ⚠️ | ⚠️ | ❌ |
+| Reflection-Free | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Code Generation | ✅ | ⚠️ | ✅ | ❌ | ❌ |
+| Cross-Platform | ✅ | ✅ | ✅ | ✅ | ⚠️ |
+| Zero-Copy | ✅ | ⚠️ | ❌ | ❌ | ❌ |
 
 ## Installation
 
 1. Add the YoloSerializer.Core package to your project
-2. Add the YoloSerializer.Generator package as an analyzer to your project
+2. Use the YoloSerializer.Generator to generate serializers for your types
 
 ```xml
 <ItemGroup>
     <PackageReference Include="YoloSerializer.Core" Version="1.0.0" />
-    <PackageReference Include="YoloSerializer.Generator" Version="1.0.0" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
 </ItemGroup>
 ```
 
-## Usage
+## Basic Usage
 
-1. Mark your class with the `[YoloSerializable]` attribute and make it `partial`:
+1. Create your data model classes:
 
 ```csharp
-[YoloSerializable]
-public partial class Person
+// No special attributes or base classes needed
+public class Player
 {
-    private string name;
-    private int age;
-    private bool isActive;
-    private Address address;  // Nested objects must also be marked with [YoloSerializable]
+    public int id;
+    public string name;
+    public float health;
+    public Position position;
+    public bool isActive;
+    public List<string> achievements;
+    public Dictionary<string, int> stats;
 }
 
-[YoloSerializable]
-public partial class Address
+public class Position
 {
-    private string street;
-    private int number;
+    public float x;
+    public float y;
+    public float z;
 }
 ```
 
-2. Serialize your object:
+2. Register your types with the serializer generator:
 
 ```csharp
-var person = new Person
+// Create a generator configuration
+var config = new GeneratorConfig
 {
-    name = "John Doe",
-    age = 30,
-    isActive = true,
-    address = new Address
-    {
-        street = "Main St",
-        number = 123
-    }
+    OutputPath = "./Generated",
+    GeneratedNamespace = "MyApp.Generated",
+    MapsNamespace = "MyApp.Generated.Maps",
+    CoreNamespace = "MyApp.Generated.Core",
+    ForceRegeneration = true
 };
 
-// Get required size
-var size = person.GetSerializedSize();
-var buffer = new byte[size];
-
-// Serialize
-var span = new Span<byte>(buffer);
-var bytesWritten = person.Serialize(span);
+// Register types with the YoloSerializer generator
+var serializableTypes = new List<Type> { typeof(Player), typeof(Position) };
+var generator = new CodeGenerator();
+await generator.GenerateSerializers(serializableTypes, config);
 ```
 
-3. Deserialize:
+3. Serialize your objects using the generated code:
 
 ```csharp
-var newPerson = new Person();
-var bytesRead = newPerson.Deserialize(new ReadOnlySpan<byte>(buffer));
+// Create an instance
+var player = new Player
+{
+    id = 42,
+    name = "SpaceRanger",
+    health = 100.0f,
+    position = new Position { x = 10.5f, y = 20.3f, z = 5.0f },
+    isActive = true,
+    achievements = new List<string> { "First Blood", "Headshot Master" },
+    stats = new Dictionary<string, int> { ["Kills"] = 150, ["Deaths"] = 50 }
+};
+
+// Get required buffer size
+var serializer = YoloGeneratedSerializer.Instance;
+int size = serializer.GetSerializedSize(player);
+var buffer = new byte[size];
+
+// Serialize to the buffer
+int offset = 0;
+serializer.Serialize(player, buffer, ref offset);
 ```
 
-## Supported Types
+4. Deserialize your objects:
 
-- Primitive types:
-  - `int`
-  - `long`
-  - `float`
-  - `double`
-  - `bool`
-  - `string`
-- Nested objects (must be marked with `[YoloSerializable]`)
-- Null values
+```csharp
+// Deserialize from buffer
+int readOffset = 0;
+var deserialized = serializer.Deserialize<Player>(new ReadOnlySpan<byte>(buffer), ref readOffset);
+```
 
-## Performance Considerations
+## Advanced Features
 
-- Uses `Span<T>` for zero-copy operations
-- No reflection at runtime
-- All serialization code is generated at compile time
-- Minimal allocations during serialization/deserialization
-- Aggressive inlining for primitive type operations
+### Null Handling
+
+YoloSerializer uses a bitset approach to efficiently handle null values:
+
+```csharp
+// Serializing objects with null fields
+var player = new Player { 
+    id = 42,
+    name = null,  // Will be properly handled
+    position = null  // Will be properly handled
+};
+
+int offset = 0;
+serializer.Serialize(player, buffer, ref offset);
+```
+
+### Collection Support
+
+YoloSerializer provides optimized serialization for collections:
+
+```csharp
+// Lists, arrays and dictionaries are fully supported
+var player = new Player {
+    achievements = new List<string> { "Champion", "Survivor" },
+    stats = new Dictionary<string, int> { 
+        ["Score"] = 1000, 
+        ["Level"] = 5 
+    }
+};
+```
+
+### Performance Considerations
+
+- Pre-allocate buffers for repeated serialization
+- Reuse buffer arrays where possible
+- Consider using `SerializeWithoutSizeCheck` when buffer size is known
+- For maximum performance, use strongly-typed overloads when available
 
 ## Unity IL2CPP Compatibility
 
-The serializer is designed to work with Unity's IL2CPP compiler:
-- No reflection usage
-- No dynamic code generation
-- All code is generated at compile time
-- Compatible with AOT compilation
+YoloSerializer is designed to work with Unity's IL2CPP compiler:
+- No runtime reflection
+- No runtime code generation
+- All serialization code is generated at compile time
+- Compatible with AOT compilation requirements
 
-## Contributing
+## Technical Details
 
-Contributions are welcome! Please feel free to submit a Pull Request. 
+YoloSerializer generates specialized serializers for each type, including:
+- Efficient detection and encoding of null values via bitsets
+- Precise size calculation for pre-allocating buffers
+- Fast serialization of primitive types, enums, and collections
+- Optimized deserialization with object pooling
+
+The serialization process is optimized for performance:
+1. Type ID is written to identify the object type
+2. Nullability bitset is written to track null fields
+3. Non-null fields are serialized in sequence
+4. Collections are serialized with length prefixing
+
+## Credits
+
+This project was created mainly with AI automation. The architecture and implementation were designed to achieve maximum performance while maintaining Unity IL2CPP compatibility.
+
+This is an ongoing proccess.
+
+## License
+
+[MIT License](LICENSE)
