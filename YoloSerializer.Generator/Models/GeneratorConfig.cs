@@ -20,5 +20,10 @@ namespace YoloSerializer.Generator.Models
         public string MapsNamespace { get; set; } = "YoloSerializer.Generated.Maps";
         public string CoreNamespace { get; set; } = "YoloSerializer.Generated.Core";
         public string ModelsNamespace { get; set; } = "YoloSerializer.Core.Models";
+
+        public string GetTypeNamespace(Type type)
+        {
+            return type.Namespace ?? throw new ArgumentException($"Type {type.Name} has no namespace");
+        }
     }
 }

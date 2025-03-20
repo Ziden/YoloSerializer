@@ -6,11 +6,15 @@ namespace YoloSerializer.Tests.Generator
 using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
 using YoloSerializer.Core;
-using YoloSerializer.Core.Models;
 using YoloSerializer.Core.Serializers;
 using {{ type_namespace }};
+{{ for namespace in type_namespaces }}
+using {{ namespace }};
+{{ end }}
 {{ for property in properties }}
+{{ if property.type_name | string.contains '.' }}
 using {{ property.type_name | string.split '.' | array.first }};
+{{ end }}
 {{ end }}
 
 namespace {{ namespace }}

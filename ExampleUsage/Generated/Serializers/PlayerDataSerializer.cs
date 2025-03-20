@@ -7,6 +7,15 @@ using System.Runtime.InteropServices;
 using System.Text;
 using YoloSerializer.Core;
 using YoloSerializer.Core.Models;
+
+using YoloSerializer.Core.Models;
+
+using System;
+
+using YoloSerializer.Core.ModelsYolo;
+
+using System.Collections.Generic;
+
 using YoloSerializer.Core.Serializers;
 using YoloSerializer.Core.Contracts;
 
@@ -25,9 +34,6 @@ namespace YoloSerializer.Core.Serializers
         public static PlayerDataSerializer Instance => _instance;
         
         private PlayerDataSerializer() { }
-        
-        // Maximum size to allocate on stack
-        private const int MaxStackAllocSize = 1024;
 
 
         // Object pooling to avoid allocations during deserialization
@@ -106,7 +112,7 @@ namespace YoloSerializer.Core.Serializers
                         playerData.PlayerName = _local_playerName;
                         Int32Serializer.Instance.Deserialize(out int _local_health, buffer, ref offset);
                         playerData.Health = _local_health;
-                        PositionSerializer.Instance.Deserialize(out Position? _local_position, buffer, ref offset);
+                        PositionSerializer.Instance.Deserialize(out YoloSerializer.Core.ModelsYolo.Position? _local_position, buffer, ref offset);
                         playerData.Position = _local_position;
                         BooleanSerializer.Instance.Deserialize(out bool _local_isActive, buffer, ref offset);
                         playerData.IsActive = _local_isActive;
@@ -114,15 +120,15 @@ namespace YoloSerializer.Core.Serializers
                         playerData.Achievements.Clear();
                         for (int i = 0; i < _local_achievementsCount; i++)
                         {
-                            StringSerializer.Instance.Deserialize(out String listItem, buffer, ref offset);
+                            StringSerializer.Instance.Deserialize(out System.String listItem, buffer, ref offset);
                             playerData.Achievements.Add(listItem);
                         }
                         Int32Serializer.Instance.Deserialize(out int _local_statsCount, buffer, ref offset);
                         playerData.Stats.Clear();
                         for (int i = 0; i < _local_statsCount; i++)
                         {
-                            StringSerializer.Instance.Deserialize(out String key, buffer, ref offset);
-                            Int32Serializer.Instance.Deserialize(out Int32 dictValue, buffer, ref offset);
+                            StringSerializer.Instance.Deserialize(out System.String key, buffer, ref offset);
+                            Int32Serializer.Instance.Deserialize(out System.Int32 dictValue, buffer, ref offset);
                             playerData.Stats[key] = dictValue;
                         }
 

@@ -7,6 +7,11 @@ using System.Runtime.InteropServices;
 using System.Text;
 using YoloSerializer.Core;
 using YoloSerializer.Core.Models;
+
+using YoloSerializer.Core.Models;
+
+using System;
+
 using YoloSerializer.Core.Serializers;
 using YoloSerializer.Core.Contracts;
 
@@ -25,9 +30,6 @@ namespace YoloSerializer.Core.Serializers
         public static AllTypesDataSerializer Instance => _instance;
         
         private AllTypesDataSerializer() { }
-        
-        // Maximum size to allocate on stack
-        private const int MaxStackAllocSize = 1024;
 
 
         // Object pooling to avoid allocations during deserialization

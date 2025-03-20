@@ -1,7 +1,7 @@
 using System;
 using YoloSerializer.Core.Contracts;
 
-namespace YoloSerializer.Core.Models
+namespace YoloSerializer.Core.ModelsYolo
 {
     /// <summary>
     /// Represents a 3D position in the game world

@@ -155,7 +155,7 @@ namespace YoloSerializer.Tests.Generator
             Assert.Contains("using System.Buffers.Binary;", content);
             Assert.Contains("using System.Runtime.CompilerServices;", content);
             Assert.Contains("using YoloSerializer.Core;", content);
-            Assert.Contains("using YoloSerializer.Core.Models;", content);
+            Assert.Contains($"using {typeof(Person).Namespace};", content);
             Assert.Contains("using YoloSerializer.Core.Serializers;", content);
         }
 

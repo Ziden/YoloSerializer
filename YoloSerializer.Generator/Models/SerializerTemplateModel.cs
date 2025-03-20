@@ -16,6 +16,7 @@ namespace YoloSerializer.Generator.Models
         public string DeserializeCode { get; set; }
         public string Namespace { get; set; }
         public string TypeNamespace { get; set; }
+        public List<string> TypeNamespaces { get; set; } = new List<string>();
         public List<PropertyTemplateModel> Properties { get; set; }
     }
 

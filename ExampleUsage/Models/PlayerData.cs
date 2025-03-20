@@ -1,4 +1,5 @@
 using YoloSerializer.Core.Contracts;
+using YoloSerializer.Core.ModelsYolo;
 
 namespace YoloSerializer.Core.Models
 {

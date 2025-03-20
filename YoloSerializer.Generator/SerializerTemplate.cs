@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace YoloSerializer.Generator
+﻿namespace YoloSerializer.Generator
 {
     public class SerializerTemplate
     {
@@ -18,7 +12,10 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using YoloSerializer.Core;
-using YoloSerializer.Core.Models;
+using {{ type_namespace }};
+{{ for namespace in type_namespaces }}
+using {{ namespace }};
+{{ end }}
 using YoloSerializer.Core.Serializers;
 using YoloSerializer.Core.Contracts;
 
@@ -37,9 +34,6 @@ namespace YoloSerializer.Core.Serializers
         public static {{ serializer_name }} Instance => _instance;
         
         private {{ serializer_name }}() { }
-        
-        // Maximum size to allocate on stack
-        private const int MaxStackAllocSize = 1024;
 
 {{ if is_class }}
         // Object pooling to avoid allocations during deserialization

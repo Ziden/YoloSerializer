@@ -5,6 +5,7 @@ using Xunit;
 using Xunit.Abstractions;
 using YoloSerializer.Core;
 using YoloSerializer.Core.Models;
+using YoloSerializer.Core.ModelsYolo;
 using YoloSerializer.Core.Serializers;
 
 namespace YoloSerializer.Tests

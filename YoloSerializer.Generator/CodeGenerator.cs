@@ -5,7 +5,6 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
-using YoloSerializer.Core.Models;
 using YoloSerializer.Generator.Models;
 
 namespace YoloSerializer.Generator
@@ -131,6 +130,37 @@ namespace YoloSerializer.Generator
             string serializeCode = CreateSerializeCode(properties);
             string deserializeCode = CreateDeserializeCode(properties);
 
+            // Collect all unique namespaces for property types
+            var typeNamespaces = new HashSet<string>();
+            typeNamespaces.Add(type.Namespace); // Add the namespace of the main type
+            
+            foreach (var prop in properties)
+            {
+                var propType = prop.PropertyType;
+                
+                // Add namespace for the property type
+                if (propType.Namespace != null && propType.Namespace != type.Namespace)
+                    typeNamespaces.Add(propType.Namespace);
+                
+                // For collections, add namespace for element types
+                if (prop.IsList || prop.IsArray)
+                {
+                    var elementType = TypeHelper.GetElementType(propType);
+                    if (elementType?.Namespace != null && elementType.Namespace != type.Namespace)
+                        typeNamespaces.Add(elementType.Namespace);
+                }
+                else if (prop.IsDictionary)
+                {
+                    var keyType = TypeHelper.GetDictionaryKeyType(propType);
+                    if (keyType?.Namespace != null && keyType.Namespace != type.Namespace)
+                        typeNamespaces.Add(keyType.Namespace);
+                        
+                    var valueType = TypeHelper.GetDictionaryValueType(propType);
+                    if (valueType?.Namespace != null && valueType.Namespace != type.Namespace)
+                        typeNamespaces.Add(valueType.Namespace);
+                }
+            }
+
             // Create template context
             var templateContext = CreateTemplateContext(
                 type,
@@ -146,6 +176,9 @@ namespace YoloSerializer.Generator
                 serializeCode,
                 deserializeCode
             );
+            
+            // Add namespaces to the template context
+            templateContext.TypeNamespaces = typeNamespaces.ToList();
 
             // Parse and render the template
             var result = await template.RenderAsync(templateContext);
@@ -276,9 +309,16 @@ namespace YoloSerializer.Generator
             sb.AppendLine("using System.Buffers.Binary;");
             sb.AppendLine("using System.Runtime.CompilerServices;");
             sb.AppendLine("using YoloSerializer.Core.Contracts;");
-            sb.AppendLine("using YoloSerializer.Core.Models;");
             sb.AppendLine("using YoloSerializer.Core.Serializers;");
             sb.AppendLine($"using {_config.GeneratedNamespace};");
+            
+            // Add imports for each type's namespace
+            var namespaces = _serializableTypes.Select(t => t.Namespace).Distinct();
+            foreach (var ns in namespaces)
+            {
+                sb.AppendLine($"using {ns};");
+            }
+            
             sb.AppendLine();
             sb.AppendLine($"namespace {_config.MapsNamespace}");
             sb.AppendLine("{");
@@ -423,10 +463,17 @@ namespace YoloSerializer.Generator
             sb.AppendLine("using System.Buffers.Binary;");
             sb.AppendLine("using System.Runtime.CompilerServices;");
             sb.AppendLine("using YoloSerializer.Core;");
-            sb.AppendLine($"using {_config.ModelsNamespace};");
             sb.AppendLine("using YoloSerializer.Core.Serializers;");
             sb.AppendLine("using YoloSerializer.Core.Contracts;");
             sb.AppendLine($"using {_config.MapsNamespace};");
+            
+            // Add imports for each type's namespace
+            var namespaces = _serializableTypes.Select(t => t.Namespace).Distinct();
+            foreach (var ns in namespaces)
+            {
+                sb.AppendLine($"using {ns};");
+            }
+            
             sb.AppendLine("namespace YoloSerializer.Core.Serializers");
             sb.AppendLine("{");
         }
@@ -612,18 +659,24 @@ namespace YoloSerializer.Generator
             else if (unwrappedType.IsEnum)
             {
                 var fullTypeName = TypeHelper.GetFullTypeName(unwrappedType);
-                propertyInfo.SizeCalculation = $"EnumSerializer<{fullTypeName}>.Instance.GetSize({instancePropRef})";
-                propertyInfo.SerializeCode = $"EnumSerializer<{fullTypeName}>.Instance.Serialize({instancePropRef}, buffer, ref offset);";
-                propertyInfo.DeserializeCode = $"EnumSerializer<{fullTypeName}>.Instance.Deserialize(out {fullTypeName} {localVarName}, buffer, ref offset);\n" +
+                var fullTypeWithNamespace = unwrappedType.Namespace != property.DeclaringType.Namespace ? 
+                    $"{unwrappedType.Namespace}.{fullTypeName}" : fullTypeName;
+                    
+                propertyInfo.SizeCalculation = $"EnumSerializer<{fullTypeWithNamespace}>.Instance.GetSize({instancePropRef})";
+                propertyInfo.SerializeCode = $"EnumSerializer<{fullTypeWithNamespace}>.Instance.Serialize({instancePropRef}, buffer, ref offset);";
+                propertyInfo.DeserializeCode = $"EnumSerializer<{fullTypeWithNamespace}>.Instance.Deserialize(out {fullTypeWithNamespace} {localVarName}, buffer, ref offset);\n" +
                                            $"            {instancePropRef} = {localVarName};";
             }
             else if (propertyInfo.IsYoloSerializable)
             {
                 var serializerName = $"{unwrappedType.Name}Serializer";
                 var fullTypeName = TypeHelper.GetFullTypeName(unwrappedType);
+                var fullTypeWithNamespace = unwrappedType.Namespace != property.DeclaringType.Namespace ? 
+                    $"{unwrappedType.Namespace}.{fullTypeName}" : fullTypeName;
+                    
                 propertyInfo.SizeCalculation = $"{serializerName}.Instance.GetSize({instancePropRef})";
                 propertyInfo.SerializeCode = $"{serializerName}.Instance.Serialize({instancePropRef}, buffer, ref offset);";
-                propertyInfo.DeserializeCode = $"{serializerName}.Instance.Deserialize(out {fullTypeName}{nullableMarker} {localVarName}, buffer, ref offset);\n" +
+                propertyInfo.DeserializeCode = $"{serializerName}.Instance.Deserialize(out {fullTypeWithNamespace}{nullableMarker} {localVarName}, buffer, ref offset);\n" +
                                            $"            {instancePropRef} = {localVarName};";
             }
             else
@@ -709,6 +762,30 @@ namespace YoloSerializer.Generator
             var keySerializer = keyType != null ? TypeHelper.GetSerializerForType(keyType) : null;
             var elementTypeName = TypeHelper.GetFullTypeName(elementType);
             var keyTypeName = keyType != null ? TypeHelper.GetFullTypeName(keyType) : null;
+            
+            // Get declaring type to check if we need to use fully qualified names
+            Type declaringType = null;
+            if (instancePropRef.Contains('.'))
+            {
+                var parts = instancePropRef.Split('.');
+                var instanceName = parts[0];
+                // Find the declaring type from the serializable types
+                declaringType = _serializableTypes.FirstOrDefault(t => 
+                    TypeHelper.GetInstanceVarName(t.Name) == instanceName);
+            }
+            
+            // Use fully qualified names if the types are in different namespaces
+            string fullElementTypeName = elementTypeName;
+            if (declaringType != null && elementType.Namespace != declaringType.Namespace)
+            {
+                fullElementTypeName = $"{elementType.Namespace}.{elementTypeName}";
+            }
+            
+            string fullKeyTypeName = keyTypeName;
+            if (declaringType != null && keyType != null && keyType.Namespace != declaringType.Namespace)
+            {
+                fullKeyTypeName = $"{keyType.Namespace}.{keyTypeName}";
+            }
 
             return type switch
             {
@@ -716,22 +793,22 @@ namespace YoloSerializer.Generator
                                      $"            {instancePropRef}.Clear();\n" +
                                      $"            for (int i = 0; i < {localVarName}Count; i++)\n" +
                                      $"            {{\n" +
-                                     $"                {elementSerializer}.Instance.Deserialize(out {elementTypeName} listItem, buffer, ref offset);\n" +
+                                     $"                {elementSerializer}.Instance.Deserialize(out {fullElementTypeName} listItem, buffer, ref offset);\n" +
                                      $"                {instancePropRef}.Add(listItem);\n" +
                                      $"            }}",
                 CollectionType.Dictionary => $"Int32Serializer.Instance.Deserialize(out int {localVarName}Count, buffer, ref offset);\n" +
                                            $"            {instancePropRef}.Clear();\n" +
                                            $"            for (int i = 0; i < {localVarName}Count; i++)\n" +
                                            $"            {{\n" +
-                                           $"                {keySerializer}.Instance.Deserialize(out {keyTypeName} key, buffer, ref offset);\n" +
-                                           $"                {elementSerializer}.Instance.Deserialize(out {elementTypeName} dictValue, buffer, ref offset);\n" +
+                                           $"                {keySerializer}.Instance.Deserialize(out {fullKeyTypeName} key, buffer, ref offset);\n" +
+                                           $"                {elementSerializer}.Instance.Deserialize(out {fullElementTypeName} dictValue, buffer, ref offset);\n" +
                                            $"                {instancePropRef}[key] = dictValue;\n" +
                                            $"            }}",
                 CollectionType.Array => $"Int32Serializer.Instance.Deserialize(out int {localVarName}Length, buffer, ref offset);\n" +
-                                      $"            {instancePropRef} = new {elementTypeName}[{localVarName}Length];\n" +
+                                      $"            {instancePropRef} = new {fullElementTypeName}[{localVarName}Length];\n" +
                                       $"            for (int i = 0; i < {localVarName}Length; i++)\n" +
                                       $"            {{\n" +
-                                      $"                {elementSerializer}.Instance.Deserialize(out {elementTypeName} arrayItem, buffer, ref offset);\n" +
+                                      $"                {elementSerializer}.Instance.Deserialize(out {fullElementTypeName} arrayItem, buffer, ref offset);\n" +
                                       $"                {instancePropRef}[i] = arrayItem;\n" +
                                       $"            }}",
                 _ => throw new ArgumentException("Invalid collection type")
@@ -816,7 +893,13 @@ namespace YoloSerializer.Generator
             var sb = new StringBuilder();
             sb.AppendLine("using System;");
             sb.AppendLine("using System.Collections.Generic;");
-            sb.AppendLine($"using {_config.ModelsNamespace};");
+            
+            // Add imports for each type's namespace
+            var namespaces = serializableTypes.Select(t => t.Namespace).Distinct();
+            foreach (var ns in namespaces)
+            {
+                sb.AppendLine($"using {ns};");
+            }
 
             sb.AppendLine();
             sb.AppendLine($"namespace {_config.CoreNamespace}");
