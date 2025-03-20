@@ -43,6 +43,7 @@ namespace YoloSerializer.Benchmarks
 
         // Properties to expose private fields for debugging
         public SimpleData SimpleData => _simpleData;
+        public ComplexData ComplexData => _complexData;
         public YoloGeneratedSerializer Serializer => _yoloSerializer;
 
         [GlobalSetup]
