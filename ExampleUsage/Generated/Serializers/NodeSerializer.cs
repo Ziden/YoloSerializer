@@ -40,6 +40,16 @@ namespace YoloSerializer.Core.Serializers
         // Shared empty array for optimization
         private static readonly byte[] EmptyArray = Array.Empty<byte>();
 
+        // Number of nullable fields in this type
+        private const int NullableFieldCount = 2;
+        
+        // Size of the nullability bitset in bytes
+        private const int NullableBitsetSize = 1;
+        
+        // Create stack allocated bitset array for nullability tracking
+        private Span<byte> GetBitsetArray(Span<byte> tempBuffer) => 
+            NullableBitsetSize > 0 ? tempBuffer.Slice(0, NullableBitsetSize) : default;
+
         /// <summary>
         /// Gets the total size needed to serialize the Node
         /// </summary>
@@ -52,9 +62,13 @@ namespace YoloSerializer.Core.Serializers
 
             
             int size = 0;
+            
+            // Add size for nullability bitset if needed
+            size += NullableBitsetSize;
+            
             size += Int32Serializer.Instance.GetSize(node.Id);
-                        size += StringSerializer.Instance.GetSize(node.Name);
-                        size += NodeSerializer.Instance.GetSize(node.Next);
+                        size += node.Name == null ? 0 : StringSerializer.Instance.GetSize(node.Name);
+                        size += node.Next == null ? 0 : NodeSerializer.Instance.GetSize(node.Next);
 
             return size;
         }
@@ -69,9 +83,29 @@ namespace YoloSerializer.Core.Serializers
             if (node == null)
                 throw new ArgumentNullException(nameof(node));
 
+
+            // Create temporary buffer for nullability bitset
+            Span<byte> tempBuffer = stackalloc byte[32]; // Enough for 256 nullable fields
+            Span<byte> bitset = GetBitsetArray(tempBuffer);
+            
+            // Initialize all bits to 0 (non-null)
+            for (int i = 0; i < bitset.Length; i++)
+                bitset[i] = 0;
+                
+            // First determine the nullability of each field
+                        NullableBitset.SetBit(bitset, 1, node.Name == null);
+                        NullableBitset.SetBit(bitset, 2, node.Next == null);
+
+            
+            // Write the nullability bitset to the buffer
+            NullableBitset.SerializeBitset(bitset, NullableBitsetSize, buffer, ref offset);
+            
+            // Write the actual field values
             Int32Serializer.Instance.Serialize(node.Id, buffer, ref offset);
-                        StringSerializer.Instance.Serialize(node.Name, buffer, ref offset);
-                        NodeSerializer.Instance.Serialize(node.Next, buffer, ref offset);
+                        if (!NullableBitset.IsNull(bitset, 1))
+                            StringSerializer.Instance.Serialize(node.Name, buffer, ref offset);
+                        if (!NullableBitset.IsNull(bitset, 2))
+                            NodeSerializer.Instance.Serialize(node.Next, buffer, ref offset);
         }
 
         /// <summary>
@@ -85,12 +119,29 @@ namespace YoloSerializer.Core.Serializers
             var node = _nodePool.Get();
 
 
+            // Create temporary buffer for nullability bitset
+            Span<byte> tempBuffer = stackalloc byte[32]; // Enough for 256 nullable fields
+            Span<byte> bitset = GetBitsetArray(tempBuffer);
+            
+            // Read the nullability bitset from the buffer
+            NullableBitset.DeserializeBitset(buffer, ref offset, bitset, NullableBitsetSize);
+
             Int32Serializer.Instance.Deserialize(out int _local_id, buffer, ref offset);
                         node.Id = _local_id;
-                        StringSerializer.Instance.Deserialize(out string _local_name, buffer, ref offset);
-                        node.Name = _local_name;
-                        NodeSerializer.Instance.Deserialize(out Node? _local_next, buffer, ref offset);
-                        node.Next = _local_next;
+                        if (NullableBitset.IsNull(bitset, 1))
+                            node.Name = null;
+                        else
+                        {
+                            StringSerializer.Instance.Deserialize(out string _local_name, buffer, ref offset);
+                            node.Name = _local_name;
+                        }
+                        if (NullableBitset.IsNull(bitset, 2))
+                            node.Next = null;
+                        else
+                        {
+                            NodeSerializer.Instance.Deserialize(out Node? _local_next, buffer, ref offset);
+                            node.Next = _local_next;
+                        }
 
             value = node;
         }

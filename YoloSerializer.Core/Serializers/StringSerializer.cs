@@ -28,10 +28,16 @@ namespace YoloSerializer.Core.Serializers
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Serialize(string? value, Span<byte> span, ref int offset)
         {
-            if (NullHandler.WriteNullIfNeeded(value, span, ref offset))
+            // Note: string null handling is managed by the BitSet in the containing object serializer
+            // We only need to handle null here when string is used directly without a containing object
+            
+            if (value == null)
+            {
+                span.WriteInt32(ref offset, NullHandler.NullMarker);
                 return;
+            }
                 
-            if (value!.Length == 0)
+            if (value.Length == 0)
             {
                 span.WriteInt32(ref offset, EmptyStringMarker);
                 return;
@@ -62,12 +68,17 @@ namespace YoloSerializer.Core.Serializers
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Deserialize(out string? value, ReadOnlySpan<byte> span, ref int offset)
         {
-            if (NullHandler.ReadAndCheckNull(span, ref offset, out int byteCount))
+            // Read the length marker
+            Int32Serializer.Instance.Deserialize(out int byteCount, span, ref offset);
+            
+            // Handle null marker case
+            if (byteCount == NullHandler.NullMarker)
             {
                 value = null;
                 return;
             }
             
+            // Handle empty string case
             if (byteCount == EmptyStringMarker)
             {
                 value = string.Empty;

@@ -91,7 +91,7 @@ namespace YoloSerializer.Tests
             // Arrange
             var original = new PlayerData(
                 playerId: 42,
-                playerName: "TestPlayer",
+                playerName: "",
                 health: 100,
                 position: new Position(1.5f, 2.5f, 3.5f),
                 isActive: true

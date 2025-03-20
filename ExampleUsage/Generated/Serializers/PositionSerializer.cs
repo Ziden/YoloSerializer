@@ -40,6 +40,16 @@ namespace YoloSerializer.Core.Serializers
         // Shared empty array for optimization
         private static readonly byte[] EmptyArray = Array.Empty<byte>();
 
+        // Number of nullable fields in this type
+        private const int NullableFieldCount = 0;
+        
+        // Size of the nullability bitset in bytes
+        private const int NullableBitsetSize = 0;
+        
+        // Create stack allocated bitset array for nullability tracking
+        private Span<byte> GetBitsetArray(Span<byte> tempBuffer) => 
+            NullableBitsetSize > 0 ? tempBuffer.Slice(0, NullableBitsetSize) : default;
+
         /// <summary>
         /// Gets the total size needed to serialize the Position
         /// </summary>
@@ -52,6 +62,10 @@ namespace YoloSerializer.Core.Serializers
 
             
             int size = 0;
+            
+            // Add size for nullability bitset if needed
+            size += NullableBitsetSize;
+            
             size += SingleSerializer.Instance.GetSize(position.X);
                         size += SingleSerializer.Instance.GetSize(position.Y);
                         size += SingleSerializer.Instance.GetSize(position.Z);
@@ -69,6 +83,22 @@ namespace YoloSerializer.Core.Serializers
             if (position == null)
                 throw new ArgumentNullException(nameof(position));
 
+
+            // Create temporary buffer for nullability bitset
+            Span<byte> tempBuffer = stackalloc byte[32]; // Enough for 256 nullable fields
+            Span<byte> bitset = GetBitsetArray(tempBuffer);
+            
+            // Initialize all bits to 0 (non-null)
+            for (int i = 0; i < bitset.Length; i++)
+                bitset[i] = 0;
+                
+            // First determine the nullability of each field
+            
+            
+            // Write the nullability bitset to the buffer
+            NullableBitset.SerializeBitset(bitset, NullableBitsetSize, buffer, ref offset);
+            
+            // Write the actual field values
             SingleSerializer.Instance.Serialize(position.X, buffer, ref offset);
                         SingleSerializer.Instance.Serialize(position.Y, buffer, ref offset);
                         SingleSerializer.Instance.Serialize(position.Z, buffer, ref offset);
@@ -84,6 +114,13 @@ namespace YoloSerializer.Core.Serializers
             // Get a Position instance from pool
             var position = _positionPool.Get();
 
+
+            // Create temporary buffer for nullability bitset
+            Span<byte> tempBuffer = stackalloc byte[32]; // Enough for 256 nullable fields
+            Span<byte> bitset = GetBitsetArray(tempBuffer);
+            
+            // Read the nullability bitset from the buffer
+            NullableBitset.DeserializeBitset(buffer, ref offset, bitset, NullableBitsetSize);
 
             SingleSerializer.Instance.Deserialize(out float _local_x, buffer, ref offset);
                         position.X = _local_x;

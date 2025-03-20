@@ -44,6 +44,16 @@ namespace YoloSerializer.Core.Serializers
         // Shared empty array for optimization
         private static readonly byte[] EmptyArray = Array.Empty<byte>();
 
+        // Number of nullable fields in this type
+        private const int NullableFieldCount = {{ nullable_field_count }};
+        
+        // Size of the nullability bitset in bytes
+        private const int NullableBitsetSize = {{ nullable_bitset_size }};
+        
+        // Create stack allocated bitset array for nullability tracking
+        private Span<byte> GetBitsetArray(Span<byte> tempBuffer) => 
+            NullableBitsetSize > 0 ? tempBuffer.Slice(0, NullableBitsetSize) : default;
+
         /// <summary>
         /// Gets the total size needed to serialize the {{ class_name }}
         /// </summary>
@@ -56,6 +66,10 @@ namespace YoloSerializer.Core.Serializers
 {{ end }}
             
             int size = 0;
+            
+            // Add size for nullability bitset if needed
+            size += NullableBitsetSize;
+            
             {{ size_calculation }}
 
             return size;
@@ -71,6 +85,22 @@ namespace YoloSerializer.Core.Serializers
             if ({{ instance_var_name }} == null)
                 throw new ArgumentNullException(nameof({{ instance_var_name }}));
 {{ end }}
+
+            // Create temporary buffer for nullability bitset
+            Span<byte> tempBuffer = stackalloc byte[32]; // Enough for 256 nullable fields
+            Span<byte> bitset = GetBitsetArray(tempBuffer);
+            
+            // Initialize all bits to 0 (non-null)
+            for (int i = 0; i < bitset.Length; i++)
+                bitset[i] = 0;
+                
+            // First determine the nullability of each field
+            {{ nullability_check_code }}
+            
+            // Write the nullability bitset to the buffer
+            NullableBitset.SerializeBitset(bitset, NullableBitsetSize, buffer, ref offset);
+            
+            // Write the actual field values
             {{ serialize_code }}
         }
 
@@ -86,6 +116,13 @@ namespace YoloSerializer.Core.Serializers
 {{ else }}
             var {{ instance_var_name }} = new {{ class_name }}();
 {{ end }}
+
+            // Create temporary buffer for nullability bitset
+            Span<byte> tempBuffer = stackalloc byte[32]; // Enough for 256 nullable fields
+            Span<byte> bitset = GetBitsetArray(tempBuffer);
+            
+            // Read the nullability bitset from the buffer
+            NullableBitset.DeserializeBitset(buffer, ref offset, bitset, NullableBitsetSize);
 
             {{ deserialize_code }}
 

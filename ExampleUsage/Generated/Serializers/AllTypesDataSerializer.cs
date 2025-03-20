@@ -40,6 +40,16 @@ namespace YoloSerializer.Core.Serializers
         // Shared empty array for optimization
         private static readonly byte[] EmptyArray = Array.Empty<byte>();
 
+        // Number of nullable fields in this type
+        private const int NullableFieldCount = 1;
+        
+        // Size of the nullability bitset in bytes
+        private const int NullableBitsetSize = 1;
+        
+        // Create stack allocated bitset array for nullability tracking
+        private Span<byte> GetBitsetArray(Span<byte> tempBuffer) => 
+            NullableBitsetSize > 0 ? tempBuffer.Slice(0, NullableBitsetSize) : default;
+
         /// <summary>
         /// Gets the total size needed to serialize the AllTypesData
         /// </summary>
@@ -52,12 +62,16 @@ namespace YoloSerializer.Core.Serializers
 
             
             int size = 0;
+            
+            // Add size for nullability bitset if needed
+            size += NullableBitsetSize;
+            
             size += Int32Serializer.Instance.GetSize(allTypesData.Int32Value);
                         size += Int64Serializer.Instance.GetSize(allTypesData.Int64Value);
                         size += SingleSerializer.Instance.GetSize(allTypesData.FloatValue);
                         size += DoubleSerializer.Instance.GetSize(allTypesData.DoubleValue);
                         size += BooleanSerializer.Instance.GetSize(allTypesData.BoolValue);
-                        size += StringSerializer.Instance.GetSize(allTypesData.StringValue);
+                        size += allTypesData.StringValue == null ? 0 : StringSerializer.Instance.GetSize(allTypesData.StringValue);
                         size += ByteSerializer.Instance.GetSize(allTypesData.ByteValue);
                         size += SByteSerializer.Instance.GetSize(allTypesData.SByteValue);
                         size += CharSerializer.Instance.GetSize(allTypesData.CharValue);
@@ -84,12 +98,30 @@ namespace YoloSerializer.Core.Serializers
             if (allTypesData == null)
                 throw new ArgumentNullException(nameof(allTypesData));
 
+
+            // Create temporary buffer for nullability bitset
+            Span<byte> tempBuffer = stackalloc byte[32]; // Enough for 256 nullable fields
+            Span<byte> bitset = GetBitsetArray(tempBuffer);
+            
+            // Initialize all bits to 0 (non-null)
+            for (int i = 0; i < bitset.Length; i++)
+                bitset[i] = 0;
+                
+            // First determine the nullability of each field
+                        NullableBitset.SetBit(bitset, 1, allTypesData.StringValue == null);
+
+            
+            // Write the nullability bitset to the buffer
+            NullableBitset.SerializeBitset(bitset, NullableBitsetSize, buffer, ref offset);
+            
+            // Write the actual field values
             Int32Serializer.Instance.Serialize(allTypesData.Int32Value, buffer, ref offset);
                         Int64Serializer.Instance.Serialize(allTypesData.Int64Value, buffer, ref offset);
                         SingleSerializer.Instance.Serialize(allTypesData.FloatValue, buffer, ref offset);
                         DoubleSerializer.Instance.Serialize(allTypesData.DoubleValue, buffer, ref offset);
                         BooleanSerializer.Instance.Serialize(allTypesData.BoolValue, buffer, ref offset);
-                        StringSerializer.Instance.Serialize(allTypesData.StringValue, buffer, ref offset);
+                        if (!NullableBitset.IsNull(bitset, 1))
+                            StringSerializer.Instance.Serialize(allTypesData.StringValue, buffer, ref offset);
                         ByteSerializer.Instance.Serialize(allTypesData.ByteValue, buffer, ref offset);
                         SByteSerializer.Instance.Serialize(allTypesData.SByteValue, buffer, ref offset);
                         CharSerializer.Instance.Serialize(allTypesData.CharValue, buffer, ref offset);
@@ -115,6 +147,13 @@ namespace YoloSerializer.Core.Serializers
             var allTypesData = _allTypesDataPool.Get();
 
 
+            // Create temporary buffer for nullability bitset
+            Span<byte> tempBuffer = stackalloc byte[32]; // Enough for 256 nullable fields
+            Span<byte> bitset = GetBitsetArray(tempBuffer);
+            
+            // Read the nullability bitset from the buffer
+            NullableBitset.DeserializeBitset(buffer, ref offset, bitset, NullableBitsetSize);
+
             Int32Serializer.Instance.Deserialize(out int _local_int32Value, buffer, ref offset);
                         allTypesData.Int32Value = _local_int32Value;
                         Int64Serializer.Instance.Deserialize(out long _local_int64Value, buffer, ref offset);
@@ -125,8 +164,13 @@ namespace YoloSerializer.Core.Serializers
                         allTypesData.DoubleValue = _local_doubleValue;
                         BooleanSerializer.Instance.Deserialize(out bool _local_boolValue, buffer, ref offset);
                         allTypesData.BoolValue = _local_boolValue;
-                        StringSerializer.Instance.Deserialize(out string _local_stringValue, buffer, ref offset);
-                        allTypesData.StringValue = _local_stringValue;
+                        if (NullableBitset.IsNull(bitset, 1))
+                            allTypesData.StringValue = null;
+                        else
+                        {
+                            StringSerializer.Instance.Deserialize(out string _local_stringValue, buffer, ref offset);
+                            allTypesData.StringValue = _local_stringValue;
+                        }
                         ByteSerializer.Instance.Deserialize(out byte _local_byteValue, buffer, ref offset);
                         allTypesData.ByteValue = _local_byteValue;
                         SByteSerializer.Instance.Deserialize(out sbyte _local_sByteValue, buffer, ref offset);

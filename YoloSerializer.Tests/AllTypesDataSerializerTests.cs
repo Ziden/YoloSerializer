@@ -31,23 +31,23 @@ namespace YoloSerializer.Tests
                 guidValue: Guid.NewGuid(),
                 enumValue: TestEnum.Value2
             );
-            
+
             var serializer = AllTypesDataSerializer.Instance;
-            
+
             // Get size and create buffer
             int size = serializer.GetSize(original);
             byte[] buffer = new byte[size];
             int offset = 0;
-            
+
             // Act
             serializer.Serialize(original, buffer, ref offset);
-            
+
             offset = 0;
             serializer.Deserialize(out AllTypesData result, buffer, ref offset);
-            
+
             // Assert
             Assert.Equal(original, result);
-            
+
             // Verify each field individually for better diagnostics
             Assert.Equal(original.Int32Value, result.Int32Value);
             Assert.Equal(original.Int64Value, result.Int64Value);
@@ -68,7 +68,7 @@ namespace YoloSerializer.Tests
             Assert.Equal(original.GuidValue, result.GuidValue);
             Assert.Equal(original.EnumValue, result.EnumValue);
         }
-        
+
         [Fact]
         public void AllTypesDataSerializer_ShouldHandleNullString()
         {
@@ -93,25 +93,25 @@ namespace YoloSerializer.Tests
                 guidValue: Guid.NewGuid(),
                 enumValue: TestEnum.Value2
             );
-            
+
             var serializer = AllTypesDataSerializer.Instance;
-            
+
             // Get size and create buffer
             int size = serializer.GetSize(original);
             byte[] buffer = new byte[size];
             int offset = 0;
-            
+
             // Act
             serializer.Serialize(original, buffer, ref offset);
-            
+
             offset = 0;
             serializer.Deserialize(out AllTypesData result, buffer, ref offset);
-            
+
             // Assert
             Assert.Equal(original, result);
             Assert.Null(result.StringValue);
         }
-        
+
         [Fact]
         public void AllTypesDataSerializer_ShouldHandleSpecialValues()
         {
@@ -136,20 +136,20 @@ namespace YoloSerializer.Tests
                 guidValue: Guid.Empty,
                 enumValue: TestEnum.Value3
             );
-            
+
             var serializer = AllTypesDataSerializer.Instance;
-            
+
             // Get size and create buffer
             int size = serializer.GetSize(original);
             byte[] buffer = new byte[size];
             int offset = 0;
-            
+
             // Act
             serializer.Serialize(original, buffer, ref offset);
-            
+
             offset = 0;
             serializer.Deserialize(out var result, buffer, ref offset);
-            
+
             // Assert - Compare individual values instead of reference comparison
             Assert.Equal(int.MinValue, result.Int32Value);
             Assert.Equal(long.MinValue, result.Int64Value);

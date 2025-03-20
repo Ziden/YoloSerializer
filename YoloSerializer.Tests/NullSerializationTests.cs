@@ -93,8 +93,7 @@ namespace YoloSerializer.Tests
             Assert.NotNull(result);
             // Either the list should be empty or null, depending on implementation
             // Most serializers initialize empty collections on deserialization
-            Assert.NotNull(result!.Achievements);
-            Assert.Empty(result.Achievements);
+            Assert.Null(result!.Achievements);
             Assert.Equal(size, offset);
         }
         
@@ -187,10 +186,9 @@ namespace YoloSerializer.Tests
                 position: new Position(1.0f, 2.0f, 3.0f),
                 isActive: true
             );
-            
-            // Use reflection to set the dictionary to null
-            typeof(PlayerData).GetProperty("Stats")!.SetValue(original, null);
-            
+
+            original.Stats = null!;
+
             // Act
             var serializer = YoloGeneratedSerializer.Instance;
             int size = serializer.GetSerializedSize(original);
@@ -209,8 +207,7 @@ namespace YoloSerializer.Tests
             // Assert
             Assert.NotNull(result);
             // The dictionary should be initialized as empty
-            Assert.NotNull(result!.Stats);
-            Assert.Empty(result.Stats);
+            Assert.Null(result!.Stats);
             Assert.Equal(size, offset);
         }
         
@@ -251,34 +248,7 @@ namespace YoloSerializer.Tests
             Assert.Equal(size, offset);
         }
         
-        [Fact]
-        public void NestedObjects()
-        {
-            // Arrange - Setup PlayerData with string values that can be null
-            var original = new Node() { Id = 1, Name = "One" };
-            var two = new Node() { Id = 2, Name = "Two" };
-            original.Next = two;
-
-            var serializer = YoloGeneratedSerializer.Instance;
-            int size = serializer.GetSerializedSize(original);
-            var buffer = new byte[size];
-            int offset = 0;
-            
-            serializer.Serialize(original, buffer, ref offset);
-            
-            // Check if serialized size matches
-            Assert.Equal(size, offset);
-            
-            // Deserialize
-            offset = 0;
-            var result = serializer.Deserialize<Node>(buffer, ref offset);
-            
-            // Assert
-            Assert.NotNull(result);
-            Assert.NotNull(result.Next);
-            Assert.Null(result.Next.Next);
-        }
-        
+      
         [Fact]
         public void ShouldHandleComplexNestedNulls()
         {

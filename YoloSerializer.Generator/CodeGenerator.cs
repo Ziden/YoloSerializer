@@ -6,6 +6,8 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using YoloSerializer.Generator.Models;
+using YoloSerializer.Core;
+using Microsoft.VisualBasic.FileIO;
 
 namespace YoloSerializer.Generator
 {
@@ -18,7 +20,7 @@ namespace YoloSerializer.Generator
         {
             public static bool IsList(Type type) => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>);
             public static bool IsDictionary(Type type) => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>);
-            public static bool IsNullable(Type type) => Nullable.GetUnderlyingType(type) != null;
+            public static bool IsNullable(Type type) => Nullable.GetUnderlyingType(type) != null || type == typeof(string) || !type.IsValueType;
             public static bool IsReferenceType(Type type) => !type.IsValueType;
             public static Type GetElementType(Type type) => type switch
             {
@@ -83,7 +85,7 @@ namespace YoloSerializer.Generator
         {
             _serializableTypes = serializableTypes.ToArray();
             _config = config;
-            
+
             // Create output directories
             var outputPath = config.OutputPath;
             var serializersPath = Path.Combine(outputPath, "Serializers");
@@ -133,15 +135,15 @@ namespace YoloSerializer.Generator
             // Collect all unique namespaces for property types
             var typeNamespaces = new HashSet<string>();
             typeNamespaces.Add(type.Namespace); // Add the namespace of the main type
-            
+
             foreach (var prop in properties)
             {
                 var propType = prop.PropertyType;
-                
+
                 // Add namespace for the property type
                 if (propType.Namespace != null && propType.Namespace != type.Namespace)
                     typeNamespaces.Add(propType.Namespace);
-                
+
                 // For collections, add namespace for element types
                 if (prop.IsList || prop.IsArray)
                 {
@@ -154,7 +156,7 @@ namespace YoloSerializer.Generator
                     var keyType = TypeHelper.GetDictionaryKeyType(propType);
                     if (keyType?.Namespace != null && keyType.Namespace != type.Namespace)
                         typeNamespaces.Add(keyType.Namespace);
-                        
+
                     var valueType = TypeHelper.GetDictionaryValueType(propType);
                     if (valueType?.Namespace != null && valueType.Namespace != type.Namespace)
                         typeNamespaces.Add(valueType.Namespace);
@@ -176,7 +178,7 @@ namespace YoloSerializer.Generator
                 serializeCode,
                 deserializeCode
             );
-            
+
             // Add namespaces to the template context
             templateContext.TypeNamespaces = typeNamespaces.ToList();
 
@@ -191,38 +193,71 @@ namespace YoloSerializer.Generator
 
         internal List<TemplatePropertyInfo> GetTypeProperties(Type type)
         {
+
+            // Reset all nullableFieldIndex to -1 for non-nullable fields
+            int nullableFieldCount = 0;
+
             var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                .Select(p => BuildPropertyInfo(p))
+                .Select(p => BuildPropertyInfo(p, ref nullableFieldCount))
                 .ToList();
-            
+
             // Get public fields as well
             var fields = type.GetFields(BindingFlags.Public | BindingFlags.Instance)
-                .Select(f => BuildFieldInfo(f))
+                .Select(f => BuildFieldInfo(f, ref nullableFieldCount))
                 .ToList();
-            
+
+
+            foreach(var prop in properties)
+            {
+                var unwrappedType = Nullable.GetUnderlyingType(prop.Property.PropertyType) ?? prop.Property.PropertyType;
+                BuildPropertySerializationCode(prop.Property, prop, unwrappedType);
+            }
+
+            foreach (var f in fields)
+            {
+                var unwrappedType = Nullable.GetUnderlyingType(f.Field.FieldType) ?? f.Field.FieldType;
+                BuildFieldSerializationCode(f, f.Field, unwrappedType);
+            }
+
             // Combine properties and fields
             properties.AddRange(fields);
-            
+
             return properties;
         }
 
-        internal TemplatePropertyInfo BuildFieldInfo(System.Reflection.FieldInfo field)
+        internal TemplatePropertyInfo BuildFieldInfo(System.Reflection.FieldInfo field, ref int nullableFieldCount)
         {
             var fieldType = field.FieldType;
             var unwrappedType = Nullable.GetUnderlyingType(fieldType) ?? fieldType;
-            
+
             var fieldInfo = new TemplatePropertyInfo
             {
+                Field = field,
                 Name = field.Name,
                 Type = TypeHelper.GetFullTypeName(fieldType),
                 PropertyType = fieldType,
                 IsList = TypeHelper.IsList(unwrappedType),
                 IsDictionary = TypeHelper.IsDictionary(unwrappedType),
                 IsArray = unwrappedType.IsArray,
-                IsNullable = TypeHelper.IsNullable(fieldType),
+                IsNullable = TypeHelper.IsNullable(fieldType) || (fieldType == typeof(string)),
                 IsYoloSerializable = IsExplicitSerializableType(unwrappedType)
             };
 
+            if (fieldInfo.IsNullable)
+            {
+                fieldInfo.NullableFieldIndex = ++nullableFieldCount;
+            } else
+            {
+                fieldInfo.NullableFieldIndex = -1;
+            }
+
+           
+
+            return fieldInfo;
+        }
+
+        private void BuildFieldSerializationCode(TemplatePropertyInfo fieldInfo, FieldInfo field, Type? unwrappedType)
+        {
             if (fieldInfo.IsList)
             {
                 fieldInfo.ElementType = TypeHelper.GetElementType(unwrappedType)?.Name;
@@ -243,58 +278,13 @@ namespace YoloSerializer.Generator
             {
                 SetStandardFieldCodeAndSize(fieldInfo, field);
             }
-
-            return fieldInfo;
-        }
-
-        internal void SetStandardFieldCodeAndSize(TemplatePropertyInfo fieldInfo, System.Reflection.FieldInfo field)
-        {
-            var fieldType = field.FieldType;
-            var unwrappedType = Nullable.GetUnderlyingType(fieldType) ?? fieldType;
-            var isNullable = fieldType != unwrappedType || !fieldType.IsValueType;
-            var nullableMarker = isNullable ? "?" : "";
-            var fieldName = field.Name;
-            var instanceFieldRef = $"{TypeHelper.GetInstanceVarName(field.DeclaringType.Name)}.{fieldName}";
-            var localVarName = "_local_" + TypeHelper.GetInstanceVarName(fieldName);
-
-            if (PrimitiveTypeMap.TryGetValue(unwrappedType, out var typeInfo))
-            {
-                fieldInfo.SizeCalculation = $"{typeInfo.Serializer}.Instance.GetSize({instanceFieldRef})";
-                fieldInfo.SerializeCode = $"{typeInfo.Serializer}.Instance.Serialize({instanceFieldRef}, buffer, ref offset);";
-                fieldInfo.DeserializeCode = $"{typeInfo.Serializer}.Instance.Deserialize(out {typeInfo.TypeName} {localVarName}, buffer, ref offset);\n" +
-                                           $"            {instanceFieldRef} = {localVarName};";
-            }
-            else if (unwrappedType.IsEnum)
-            {
-                var fullTypeName = TypeHelper.GetFullTypeName(unwrappedType);
-                var fullTypeWithNamespace = unwrappedType.Namespace != field.DeclaringType.Namespace ? 
-                    $"{unwrappedType.Namespace}.{fullTypeName}" : fullTypeName;
-                    
-                fieldInfo.SizeCalculation = $"EnumSerializer<{fullTypeWithNamespace}>.Instance.GetSize({instanceFieldRef})";
-                fieldInfo.SerializeCode = $"EnumSerializer<{fullTypeWithNamespace}>.Instance.Serialize({instanceFieldRef}, buffer, ref offset);";
-                fieldInfo.DeserializeCode = $"EnumSerializer<{fullTypeWithNamespace}>.Instance.Deserialize(out {fullTypeWithNamespace} {localVarName}, buffer, ref offset);\n" +
-                               $"            {instanceFieldRef} = {localVarName};";
-            }
-            else if (fieldInfo.IsYoloSerializable)
-            {
-                var serializerName = $"{unwrappedType.Name}Serializer";
-                var fullTypeName = TypeHelper.GetFullTypeName(unwrappedType);
-                var fullTypeWithNamespace = unwrappedType.Namespace != field.DeclaringType.Namespace ? 
-                    $"{unwrappedType.Namespace}.{fullTypeName}" : fullTypeName;
-                    
-                fieldInfo.SizeCalculation = $"{serializerName}.Instance.GetSize({instanceFieldRef})";
-                fieldInfo.SerializeCode = $"{serializerName}.Instance.Serialize({instanceFieldRef}, buffer, ref offset);";
-                fieldInfo.DeserializeCode = $"{serializerName}.Instance.Deserialize(out {fullTypeWithNamespace}{nullableMarker} {localVarName}, buffer, ref offset);\n" +
-                               $"            {instanceFieldRef} = {localVarName};";
-            }
-            else
-            {
-                throw new NotSupportedException($"No serializer available for type {unwrappedType.FullName}");
-            }
         }
 
         private void SetCollectionFieldCodeAndSize(TemplatePropertyInfo fieldInfo, FieldInfo field, CollectionType type)
         {
+            var fieldType = field.FieldType;
+            var isNullable = TypeHelper.IsNullable(fieldType) || Nullable.GetUnderlyingType(fieldType) != null;
+
             var elementType = type switch
             {
                 CollectionType.List => TypeHelper.GetElementType(field.FieldType),
@@ -304,7 +294,7 @@ namespace YoloSerializer.Generator
             };
 
             var keyType = type == CollectionType.Dictionary ? TypeHelper.GetDictionaryKeyType(field.FieldType) : null;
-            
+
             var fieldName = field.Name;
             var instanceFieldRef = $"{TypeHelper.GetInstanceVarName(field.DeclaringType.Name)}.{fieldName}";
             var localVarName = "_local_" + TypeHelper.GetInstanceVarName(fieldName);
@@ -319,22 +309,44 @@ namespace YoloSerializer.Generator
             {
                 fullElementTypeName = $"{elementType.Namespace}.{elementTypeName}";
             }
-            
+
             string keyTypeName = keyType != null ? TypeHelper.GetFullTypeName(keyType) : null;
             string fullKeyTypeName = keyTypeName;
             if (declaringType != null && keyType != null && keyType.Namespace != declaringType.Namespace)
             {
                 fullKeyTypeName = $"{keyType.Namespace}.{keyTypeName}";
             }
-            
+
+            // Set IsNullable flag
+            fieldInfo.IsNullable = isNullable;
+
             // Generate size calculation
-            fieldInfo.SizeCalculation = GenerateCollectionSizeCalculation(instanceFieldRef, elementType, keyType, type);
+            string sizingCode = GenerateCollectionSizeCalculation(instanceFieldRef, elementType, keyType, type);
+            if (isNullable)
+            {
+                fieldInfo.SizeCalculation = $"{instanceFieldRef} == null ? 0 : {sizingCode}";
+            }
+            else
+            {
+                fieldInfo.SizeCalculation = sizingCode;
+            }
 
             // Generate serialization code
-            fieldInfo.SerializeCode = GenerateCollectionSerializationCode(instanceFieldRef, elementType, keyType, type);
+            string serializationCode = GenerateCollectionSerializationCode(instanceFieldRef, elementType, keyType, type);
+            if (isNullable)
+            {
+                fieldInfo.SerializeCode = $"if (!NullableBitset.IsNull(bitset, {fieldInfo.NullableFieldIndex}))\n" +
+                                          $"            {{\n" +
+                                          $"                {serializationCode}\n" +
+                                          $"            }}";
+            }
+            else
+            {
+                fieldInfo.SerializeCode = serializationCode;
+            }
 
             // Generate deserialization code
-            fieldInfo.DeserializeCode = type switch
+            string baseDeserCode = type switch
             {
                 CollectionType.List => $"Int32Serializer.Instance.Deserialize(out int {localVarName}Count, buffer, ref offset);\n" +
                                      $"            {instanceFieldRef}.Clear();\n" +
@@ -360,6 +372,20 @@ namespace YoloSerializer.Generator
                               $"            }}",
                 _ => throw new ArgumentException("Invalid collection type")
             };
+
+            if (isNullable)
+            {
+                fieldInfo.DeserializeCode = $"if (NullableBitset.IsNull(bitset, {fieldInfo.NullableFieldIndex}))\n" +
+                                            $"                {instanceFieldRef} = null;\n" +
+                                            $"            else\n" +
+                                            $"            {{\n" +
+                                            $"                {baseDeserCode}\n" +
+                                            $"            }}";
+            }
+            else
+            {
+                fieldInfo.DeserializeCode = baseDeserCode;
+            }
         }
 
         internal SerializerTemplateModel CreateTemplateContext(
@@ -376,7 +402,16 @@ namespace YoloSerializer.Generator
             string serializeCode,
             string deserializeCode)
         {
-            return new SerializerTemplateModel
+
+            var nullableFieldCount = properties.Count(p => p.IsNullable);
+
+            // Calculate nullability bitset size in bytes (if any nullable fields exist)
+            int nullableBitsetSize = NullableBitset.GetBitsetSize(nullableFieldCount);
+
+            // Generate nullability check code
+            var nullabilityCheckCode = CreateNullabilityCheckCode(properties, instanceVarName);
+
+            var templateContext = new SerializerTemplateModel
             {
                 ClassName = className,
                 FullTypeName = type.FullName,
@@ -390,6 +425,9 @@ namespace YoloSerializer.Generator
                 DeserializeCode = deserializeCode,
                 Namespace = _config.GeneratedNamespace,
                 TypeNamespace = type.Namespace,
+                NullableFieldCount = nullableFieldCount,
+                NullableBitsetSize = nullableBitsetSize,
+                NullabilityCheckCode = nullabilityCheckCode,
                 Properties = properties.Select(p => new PropertyTemplateModel
                 {
                     Name = p.Name,
@@ -405,9 +443,28 @@ namespace YoloSerializer.Generator
                     ValueTypeName = p.ValueType,
                     SizeCalculation = p.SizeCalculation,
                     SerializeCode = p.SerializeCode,
-                    DeserializeCode = p.DeserializeCode
+                    DeserializeCode = p.DeserializeCode,
+                    NullableFieldIndex = p.NullableFieldIndex
                 }).ToList()
             };
+
+            return templateContext;
+        }
+
+        internal string CreateNullabilityCheckCode(List<TemplatePropertyInfo> properties, string instanceName)
+        {
+            var sb = new StringBuilder();
+
+            foreach (var prop in properties)
+            {
+                if (prop.IsNullable)
+                {
+                    string instancePropRef = $"{instanceName}.{prop.Name}";
+                    sb.AppendLine($"            NullableBitset.SetBit(bitset, {prop.NullableFieldIndex}, {instancePropRef} == null);");
+                }
+            }
+
+            return sb.ToString();
         }
 
         internal string CreateSizeCalculationCode(List<TemplatePropertyInfo> properties)
@@ -477,7 +534,7 @@ namespace YoloSerializer.Generator
             sb.AppendLine("using YoloSerializer.Core.Contracts;");
             sb.AppendLine("using YoloSerializer.Core.Serializers;");
             sb.AppendLine($"using {_config.GeneratedNamespace};");
-            
+
             // Add imports for each type's namespace
             var namespaces = _serializableTypes.Select(t => t.Namespace).Distinct();
             foreach (var ns in namespaces)
@@ -487,7 +544,7 @@ namespace YoloSerializer.Generator
                     sb.AppendLine($"using {ns};");
                 }
             }
-            
+
             sb.AppendLine();
             sb.AppendLine($"namespace {_config.MapsNamespace}");
             sb.AppendLine("{");
@@ -635,7 +692,7 @@ namespace YoloSerializer.Generator
             sb.AppendLine("using YoloSerializer.Core.Serializers;");
             sb.AppendLine("using YoloSerializer.Core.Contracts;");
             sb.AppendLine($"using {_config.MapsNamespace};");
-            
+
             // Add imports for each type's namespace
             var namespaces = _serializableTypes.Select(t => t.Namespace).Distinct();
             foreach (var ns in namespaces)
@@ -645,7 +702,7 @@ namespace YoloSerializer.Generator
                     sb.AppendLine($"using {ns};");
                 }
             }
-            
+
             sb.AppendLine("namespace YoloSerializer.Core.Serializers");
             sb.AppendLine("{");
         }
@@ -741,23 +798,38 @@ namespace YoloSerializer.Generator
             }
         }
 
-        internal TemplatePropertyInfo BuildPropertyInfo(System.Reflection.PropertyInfo property)
+        internal TemplatePropertyInfo BuildPropertyInfo(System.Reflection.PropertyInfo property, ref int nullableFieldCount)
         {
             var propertyType = property.PropertyType;
             var unwrappedType = Nullable.GetUnderlyingType(propertyType) ?? propertyType;
-            
             var propertyInfo = new TemplatePropertyInfo
             {
+                Property = property,
                 Name = property.Name,
                 Type = TypeHelper.GetFullTypeName(propertyType),
                 PropertyType = propertyType,
                 IsList = TypeHelper.IsList(unwrappedType),
                 IsDictionary = TypeHelper.IsDictionary(unwrappedType),
                 IsArray = unwrappedType.IsArray,
-                IsNullable = TypeHelper.IsNullable(propertyType),
+                IsNullable = TypeHelper.IsNullable(propertyType) || (propertyType == typeof(string)),
                 IsYoloSerializable = IsExplicitSerializableType(unwrappedType)
             };
 
+            if (propertyInfo.IsNullable)
+            {
+                propertyInfo.NullableFieldIndex = ++nullableFieldCount;
+            }
+            else
+            {
+                propertyInfo.NullableFieldIndex = -1;
+            }
+
+           
+            return propertyInfo;
+        }
+
+        private void BuildPropertySerializationCode(PropertyInfo property, TemplatePropertyInfo propertyInfo, Type? unwrappedType)
+        {
             if (propertyInfo.IsList)
             {
                 propertyInfo.ElementType = TypeHelper.GetElementType(unwrappedType)?.Name;
@@ -779,9 +851,8 @@ namespace YoloSerializer.Generator
                 SetStandardPropertyCodeAndSize(propertyInfo, property);
             }
 
-            return propertyInfo;
-        }
 
+        }
         internal bool IsExplicitSerializableType(Type type)
         {
             return _serializableTypes.Contains(type);
@@ -815,41 +886,143 @@ namespace YoloSerializer.Generator
         {
             var propertyType = property.PropertyType;
             var unwrappedType = Nullable.GetUnderlyingType(propertyType) ?? propertyType;
-            var isNullable = propertyType != unwrappedType || !propertyType.IsValueType;
+            var isNullable = propertyInfo.IsNullable;
             var nullableMarker = isNullable ? "?" : "";
             var propName = property.Name;
             var instancePropRef = $"{TypeHelper.GetInstanceVarName(property.DeclaringType.Name)}.{propName}";
             var localVarName = "_local_" + TypeHelper.GetInstanceVarName(propName);
 
+            // Set IsNullable flag
+            propertyInfo.IsNullable = isNullable;
+
             if (PrimitiveTypeMap.TryGetValue(unwrappedType, out var typeInfo))
             {
-                propertyInfo.SizeCalculation = $"{typeInfo.Serializer}.Instance.GetSize({instancePropRef})";
-                propertyInfo.SerializeCode = $"{typeInfo.Serializer}.Instance.Serialize({instancePropRef}, buffer, ref offset);";
-                propertyInfo.DeserializeCode = $"{typeInfo.Serializer}.Instance.Deserialize(out {typeInfo.TypeName} {localVarName}, buffer, ref offset);\n" +
-                                           $"            {instancePropRef} = {localVarName};";
+                // Update sizing calculation to handle nulls
+                if (isNullable)
+                {
+                    propertyInfo.SizeCalculation = $"{instancePropRef} == null ? 0 : {typeInfo.Serializer}.Instance.GetSize({instancePropRef})";
+                }
+                else
+                {
+                    propertyInfo.SizeCalculation = $"{typeInfo.Serializer}.Instance.GetSize({instancePropRef})";
+                }
+
+                // Update serialization code to use bitset
+                if (isNullable)
+                {
+                    propertyInfo.SerializeCode = $"if (!NullableBitset.IsNull(bitset, {propertyInfo.NullableFieldIndex}))\n" +
+                                               $"                {typeInfo.Serializer}.Instance.Serialize({instancePropRef}, buffer, ref offset);";
+                }
+                else
+                {
+                    propertyInfo.SerializeCode = $"{typeInfo.Serializer}.Instance.Serialize({instancePropRef}, buffer, ref offset);";
+                }
+
+                // Update deserialization code to use bitset
+                if (isNullable)
+                {
+                    propertyInfo.DeserializeCode = $"if (NullableBitset.IsNull(bitset, {propertyInfo.NullableFieldIndex}))\n" +
+                                                 $"                {instancePropRef} = null;\n" +
+                                                 $"            else\n" +
+                                                 $"            {{\n" +
+                                                 $"                {typeInfo.Serializer}.Instance.Deserialize(out {typeInfo.TypeName} {localVarName}, buffer, ref offset);\n" +
+                                                 $"                {instancePropRef} = {localVarName};\n" +
+                                                 $"            }}";
+                }
+                else
+                {
+                    propertyInfo.DeserializeCode = $"{typeInfo.Serializer}.Instance.Deserialize(out {typeInfo.TypeName} {localVarName}, buffer, ref offset);\n" +
+                                                  $"            {instancePropRef} = {localVarName};";
+                }
             }
             else if (unwrappedType.IsEnum)
             {
                 var fullTypeName = TypeHelper.GetFullTypeName(unwrappedType);
-                var fullTypeWithNamespace = unwrappedType.Namespace != property.DeclaringType.Namespace ? 
+                var fullTypeWithNamespace = unwrappedType.Namespace != property.DeclaringType.Namespace ?
                     $"{unwrappedType.Namespace}.{fullTypeName}" : fullTypeName;
-                    
-                propertyInfo.SizeCalculation = $"EnumSerializer<{fullTypeWithNamespace}>.Instance.GetSize({instancePropRef})";
-                propertyInfo.SerializeCode = $"EnumSerializer<{fullTypeWithNamespace}>.Instance.Serialize({instancePropRef}, buffer, ref offset);";
-                propertyInfo.DeserializeCode = $"EnumSerializer<{fullTypeWithNamespace}>.Instance.Deserialize(out {fullTypeWithNamespace} {localVarName}, buffer, ref offset);\n" +
-                                           $"            {instancePropRef} = {localVarName};";
+
+                // Update sizing calculation to handle nulls
+                if (isNullable)
+                {
+                    propertyInfo.SizeCalculation = $"{instancePropRef} == null ? 0 : EnumSerializer<{fullTypeWithNamespace}>.Instance.GetSize({instancePropRef})";
+                }
+                else
+                {
+                    propertyInfo.SizeCalculation = $"EnumSerializer<{fullTypeWithNamespace}>.Instance.GetSize({instancePropRef})";
+                }
+
+                // Update serialization code to use bitset
+                if (isNullable)
+                {
+                    propertyInfo.SerializeCode = $"if (!NullableBitset.IsNull(bitset, {propertyInfo.NullableFieldIndex}))\n" +
+                                               $"                EnumSerializer<{fullTypeWithNamespace}>.Instance.Serialize({instancePropRef}, buffer, ref offset);";
+                }
+                else
+                {
+                    propertyInfo.SerializeCode = $"EnumSerializer<{fullTypeWithNamespace}>.Instance.Serialize({instancePropRef}, buffer, ref offset);";
+                }
+
+                // Update deserialization code to use bitset
+                if (isNullable)
+                {
+                    propertyInfo.DeserializeCode = $"if (NullableBitset.IsNull(bitset, {propertyInfo.NullableFieldIndex}))\n" +
+                                                 $"                {instancePropRef} = null;\n" +
+                                                 $"            else\n" +
+                                                 $"            {{\n" +
+                                                 $"                EnumSerializer<{fullTypeWithNamespace}>.Instance.Deserialize(out {fullTypeWithNamespace} {localVarName}, buffer, ref offset);\n" +
+                                                 $"                {instancePropRef} = {localVarName};\n" +
+                                                 $"            }}";
+                }
+                else
+                {
+                    propertyInfo.DeserializeCode = $"EnumSerializer<{fullTypeWithNamespace}>.Instance.Deserialize(out {fullTypeWithNamespace} {localVarName}, buffer, ref offset);\n" +
+                                                  $"            {instancePropRef} = {localVarName};";
+                }
             }
             else if (propertyInfo.IsYoloSerializable)
             {
                 var serializerName = $"{unwrappedType.Name}Serializer";
                 var fullTypeName = TypeHelper.GetFullTypeName(unwrappedType);
-                var fullTypeWithNamespace = unwrappedType.Namespace != property.DeclaringType.Namespace ? 
+                var fullTypeWithNamespace = unwrappedType.Namespace != property.DeclaringType.Namespace ?
                     $"{unwrappedType.Namespace}.{fullTypeName}" : fullTypeName;
-                    
-                propertyInfo.SizeCalculation = $"{serializerName}.Instance.GetSize({instancePropRef})";
-                propertyInfo.SerializeCode = $"{serializerName}.Instance.Serialize({instancePropRef}, buffer, ref offset);";
-                propertyInfo.DeserializeCode = $"{serializerName}.Instance.Deserialize(out {fullTypeWithNamespace}{nullableMarker} {localVarName}, buffer, ref offset);\n" +
-                                           $"            {instancePropRef} = {localVarName};";
+
+                // Update sizing calculation to handle nulls
+                if (isNullable)
+                {
+                    propertyInfo.SizeCalculation = $"{instancePropRef} == null ? 0 : {serializerName}.Instance.GetSize({instancePropRef})";
+                }
+                else
+                {
+                    propertyInfo.SizeCalculation = $"{serializerName}.Instance.GetSize({instancePropRef})";
+                }
+
+                // Update serialization code to use bitset
+                if (isNullable)
+                {
+                    propertyInfo.SerializeCode = $"if (!NullableBitset.IsNull(bitset, {propertyInfo.NullableFieldIndex}))\n" +
+                                               $"                {serializerName}.Instance.Serialize({instancePropRef}, buffer, ref offset);";
+                }
+                else
+                {
+                    propertyInfo.SerializeCode = $"{serializerName}.Instance.Serialize({instancePropRef}, buffer, ref offset);";
+                }
+
+                // Update deserialization code to use bitset
+                if (isNullable)
+                {
+                    propertyInfo.DeserializeCode = $"if (NullableBitset.IsNull(bitset, {propertyInfo.NullableFieldIndex}))\n" +
+                                                 $"                {instancePropRef} = null;\n" +
+                                                 $"            else\n" +
+                                                 $"            {{\n" +
+                                                 $"                {serializerName}.Instance.Deserialize(out {fullTypeWithNamespace}{nullableMarker} {localVarName}, buffer, ref offset);\n" +
+                                                 $"                {instancePropRef} = {localVarName};\n" +
+                                                 $"            }}";
+                }
+                else
+                {
+                    propertyInfo.DeserializeCode = $"{serializerName}.Instance.Deserialize(out {fullTypeWithNamespace}{nullableMarker} {localVarName}, buffer, ref offset);\n" +
+                                                  $"            {instancePropRef} = {localVarName};";
+                }
             }
             else
             {
@@ -859,6 +1032,9 @@ namespace YoloSerializer.Generator
 
         private void SetCollectionPropertyCodeAndSize(TemplatePropertyInfo propertyInfo, PropertyInfo property, CollectionType type)
         {
+            var propertyType = property.PropertyType;
+            var isNullable = !propertyType.IsValueType || Nullable.GetUnderlyingType(propertyType) != null;
+
             var elementType = type switch
             {
                 CollectionType.List => TypeHelper.GetElementType(property.PropertyType),
@@ -868,26 +1044,66 @@ namespace YoloSerializer.Generator
             };
 
             var keyType = type == CollectionType.Dictionary ? TypeHelper.GetDictionaryKeyType(property.PropertyType) : null;
-            
+
             var propName = property.Name;
             var instancePropRef = $"{TypeHelper.GetInstanceVarName(property.DeclaringType.Name)}.{propName}";
             var localVarName = "_local_" + TypeHelper.GetInstanceVarName(propName);
 
-            // Generate size calculation
-            propertyInfo.SizeCalculation = GenerateCollectionSizeCalculation(instancePropRef, elementType, keyType, type);
+            // Set IsNullable flag
+            propertyInfo.IsNullable = isNullable;
 
-            // Generate serialization code
-            propertyInfo.SerializeCode = GenerateCollectionSerializationCode(instancePropRef, elementType, keyType, type);
+            // Update sizing calculation to handle nulls
+            string sizingCode;
+            if (isNullable)
+            {
+                // For nullable collections, we only include size if non-null (bitset handles checking null state)
+                sizingCode = GenerateCollectionSizeCalculation(instancePropRef, elementType, keyType, type);
+                propertyInfo.SizeCalculation = $"{instancePropRef} == null ? 0 : {sizingCode}";
+            }
+            else
+            {
+                sizingCode = GenerateCollectionSizeCalculation(instancePropRef, elementType, keyType, type);
+                propertyInfo.SizeCalculation = sizingCode;
+            }
 
-            // Generate deserialization code
-            propertyInfo.DeserializeCode = GenerateCollectionDeserializationCode(instancePropRef, elementType, keyType, localVarName, type);
+            // Update serialization code
+            string serializationCode = GenerateCollectionSerializationCode(instancePropRef, elementType, keyType, type);
+
+            if (isNullable)
+            {
+                propertyInfo.SerializeCode = $"if (!NullableBitset.IsNull(bitset, {propertyInfo.NullableFieldIndex}))\n" +
+                                           $"            {{\n" +
+                                           $"                {serializationCode}\n" +
+                                           $"            }}";
+            }
+            else
+            {
+                propertyInfo.SerializeCode = serializationCode;
+            }
+
+            // Update deserialization code
+            string deserCode = GenerateCollectionDeserializationCode(instancePropRef, elementType, keyType, localVarName, type);
+
+            if (isNullable)
+            {
+                propertyInfo.DeserializeCode = $"if (NullableBitset.IsNull(bitset, {propertyInfo.NullableFieldIndex}))\n" +
+                                              $"                {instancePropRef} = null;\n" +
+                                              $"            else\n" +
+                                              $"            {{\n" +
+                                              $"                {deserCode}\n" +
+                                              $"            }}";
+            }
+            else
+            {
+                propertyInfo.DeserializeCode = deserCode;
+            }
         }
 
         private string GenerateCollectionSizeCalculation(string instancePropRef, Type elementType, Type keyType, CollectionType type)
         {
             string elementSerializer;
             string keySerializer = null;
-            
+
             // Check if the element type is in the primitive type map
             if (PrimitiveTypeMap.TryGetValue(elementType, out var elementTypeInfo))
             {
@@ -897,7 +1113,7 @@ namespace YoloSerializer.Generator
             {
                 elementSerializer = TypeHelper.GetSerializerForType(elementType);
             }
-            
+
             // For dictionaries, also check if the key type is in the primitive type map
             if (keyType != null)
             {
@@ -916,16 +1132,16 @@ namespace YoloSerializer.Generator
                 CollectionType.List => $"({instancePropRef} == null ? sizeof(int) : " +
                                      $"Int32Serializer.Instance.GetSize({instancePropRef}.Count) + " +
                                      $"{instancePropRef}.Sum(listItem => {elementSerializer}.Instance.GetSize(listItem)))",
-                
+
                 CollectionType.Dictionary => $"({instancePropRef} == null ? sizeof(int) : " +
                                           $"Int32Serializer.Instance.GetSize({instancePropRef}.Count) + " +
                                           $"{instancePropRef}.Sum(kvp => {keySerializer}.Instance.GetSize(kvp.Key) + " +
                                           $"{elementSerializer}.Instance.GetSize(kvp.Value)))",
-                
+
                 CollectionType.Array => $"({instancePropRef} == null ? sizeof(int) : " +
                                       $"Int32Serializer.Instance.GetSize({instancePropRef}.Length) + " +
                                       $"{instancePropRef}.Sum(arrayItem => {elementSerializer}.Instance.GetSize(arrayItem)))",
-                
+
                 _ => throw new ArgumentException("Invalid collection type")
             };
         }
@@ -934,7 +1150,7 @@ namespace YoloSerializer.Generator
         {
             string elementSerializer;
             string keySerializer = null;
-            
+
             // Check if the element type is in the primitive type map
             if (PrimitiveTypeMap.TryGetValue(elementType, out var elementTypeInfo))
             {
@@ -944,7 +1160,7 @@ namespace YoloSerializer.Generator
             {
                 elementSerializer = TypeHelper.GetSerializerForType(elementType);
             }
-            
+
             // For dictionaries, also check if the key type is in the primitive type map
             if (keyType != null)
             {
@@ -969,7 +1185,7 @@ namespace YoloSerializer.Generator
                                      $"                    {elementSerializer}.Instance.Serialize(listItem, buffer, ref offset);\n" +
                                      $"                }}\n" +
                                      $"            }}",
-                                     
+
                 CollectionType.Dictionary => $"if ({instancePropRef} == null) {{\n" +
                                           $"                Int32Serializer.Instance.Serialize(0, buffer, ref offset);\n" +
                                           $"            }} else {{\n" +
@@ -980,7 +1196,7 @@ namespace YoloSerializer.Generator
                                           $"                    {elementSerializer}.Instance.Serialize(kvp.Value, buffer, ref offset);\n" +
                                           $"                }}\n" +
                                           $"            }}",
-                                          
+
                 CollectionType.Array => $"if ({instancePropRef} == null) {{\n" +
                                       $"                Int32Serializer.Instance.Serialize(0, buffer, ref offset);\n" +
                                       $"            }} else {{\n" +
@@ -990,7 +1206,7 @@ namespace YoloSerializer.Generator
                                       $"                    {elementSerializer}.Instance.Serialize(arrayItem, buffer, ref offset);\n" +
                                       $"                }}\n" +
                                       $"            }}",
-                                      
+
                 _ => throw new ArgumentException("Invalid collection type")
             };
         }
@@ -1001,7 +1217,7 @@ namespace YoloSerializer.Generator
             var keySerializer = keyType != null ? TypeHelper.GetSerializerForType(keyType) : null;
             var elementTypeName = TypeHelper.GetFullTypeName(elementType);
             var keyTypeName = keyType != null ? TypeHelper.GetFullTypeName(keyType) : null;
-            
+
             // Get declaring type to check if we need to use fully qualified names
             Type declaringType = null;
             if (instancePropRef.Contains('.'))
@@ -1009,17 +1225,17 @@ namespace YoloSerializer.Generator
                 var parts = instancePropRef.Split('.');
                 var instanceName = parts[0];
                 // Find the declaring type from the serializable types
-                declaringType = _serializableTypes.FirstOrDefault(t => 
+                declaringType = _serializableTypes.FirstOrDefault(t =>
                     TypeHelper.GetInstanceVarName(t.Name) == instanceName);
             }
-            
+
             // Use fully qualified names if the types are in different namespaces
             string fullElementTypeName = elementTypeName;
             if (declaringType != null && elementType.Namespace != declaringType.Namespace)
             {
                 fullElementTypeName = $"{elementType.Namespace}.{elementTypeName}";
             }
-            
+
             string fullKeyTypeName = keyTypeName;
             if (declaringType != null && keyType != null && keyType.Namespace != declaringType.Namespace)
             {
@@ -1138,7 +1354,7 @@ namespace YoloSerializer.Generator
             var sb = new StringBuilder();
             sb.AppendLine("using System;");
             sb.AppendLine("using System.Collections.Generic;");
-            
+
             // Add imports for each type's namespace
             var namespaces = serializableTypes.Select(t => t.Namespace).Distinct();
             foreach (var ns in namespaces)
@@ -1168,6 +1384,154 @@ namespace YoloSerializer.Generator
 
             await File.WriteAllTextAsync(outputFile, sb.ToString());
             Console.WriteLine($"Generated {outputFile}");
+        }
+
+        internal void SetStandardFieldCodeAndSize(TemplatePropertyInfo fieldInfo, System.Reflection.FieldInfo field)
+        {
+            var fieldType = field.FieldType;
+            var unwrappedType = Nullable.GetUnderlyingType(fieldType) ?? fieldType;
+            var isNullable = fieldType != unwrappedType || !fieldType.IsValueType || fieldType == typeof(string);
+            var nullableMarker = isNullable ? "?" : "";
+            var fieldName = field.Name;
+            var instanceFieldRef = $"{TypeHelper.GetInstanceVarName(field.DeclaringType.Name)}.{fieldName}";
+            var localVarName = "_local_" + TypeHelper.GetInstanceVarName(fieldName);
+
+            // Set IsNullable flag
+            fieldInfo.IsNullable = isNullable;
+
+            if (PrimitiveTypeMap.TryGetValue(unwrappedType, out var typeInfo))
+            {
+                // Update sizing calculation to handle nulls
+                if (isNullable)
+                {
+                    fieldInfo.SizeCalculation = $"{instanceFieldRef} == null ? 0 : {typeInfo.Serializer}.Instance.GetSize({instanceFieldRef})";
+                }
+                else
+                {
+                    fieldInfo.SizeCalculation = $"{typeInfo.Serializer}.Instance.GetSize({instanceFieldRef})";
+                }
+
+                // Update serialization code to use bitset
+                if (isNullable)
+                {
+                    fieldInfo.SerializeCode = $"if (!NullableBitset.IsNull(bitset, {fieldInfo.NullableFieldIndex}))\n" +
+                                             $"                {typeInfo.Serializer}.Instance.Serialize({instanceFieldRef}, buffer, ref offset);";
+                }
+                else
+                {
+                    fieldInfo.SerializeCode = $"{typeInfo.Serializer}.Instance.Serialize({instanceFieldRef}, buffer, ref offset);";
+                }
+
+                // Update deserialization code to use bitset
+                if (isNullable)
+                {
+                    fieldInfo.DeserializeCode = $"if (NullableBitset.IsNull(bitset, {fieldInfo.NullableFieldIndex}))\n" +
+                                               $"                {instanceFieldRef} = null;\n" +
+                                               $"            else\n" +
+                                               $"            {{\n" +
+                                               $"                {typeInfo.Serializer}.Instance.Deserialize(out {typeInfo.TypeName} {localVarName}, buffer, ref offset);\n" +
+                                               $"                {instanceFieldRef} = {localVarName};\n" +
+                                               $"            }}";
+                }
+                else
+                {
+                    fieldInfo.DeserializeCode = $"{typeInfo.Serializer}.Instance.Deserialize(out {typeInfo.TypeName} {localVarName}, buffer, ref offset);\n" +
+                                               $"            {instanceFieldRef} = {localVarName};";
+                }
+            }
+            else if (unwrappedType.IsEnum)
+            {
+                var fullTypeName = TypeHelper.GetFullTypeName(unwrappedType);
+                var fullTypeWithNamespace = unwrappedType.Namespace != field.DeclaringType.Namespace ?
+                    $"{unwrappedType.Namespace}.{fullTypeName}" : fullTypeName;
+
+                // Update sizing calculation to handle nulls
+                if (isNullable)
+                {
+                    fieldInfo.SizeCalculation = $"{instanceFieldRef} == null ? 0 : EnumSerializer<{fullTypeWithNamespace}>.Instance.GetSize({instanceFieldRef})";
+                }
+                else
+                {
+                    fieldInfo.SizeCalculation = $"EnumSerializer<{fullTypeWithNamespace}>.Instance.GetSize({instanceFieldRef})";
+                }
+
+                // Update serialization code to use bitset
+                if (isNullable)
+                {
+                    fieldInfo.SerializeCode = $"if (!NullableBitset.IsNull(bitset, {fieldInfo.NullableFieldIndex}))\n" +
+                                             $"                EnumSerializer<{fullTypeWithNamespace}>.Instance.Serialize({instanceFieldRef}, buffer, ref offset);";
+                }
+                else
+                {
+                    fieldInfo.SerializeCode = $"EnumSerializer<{fullTypeWithNamespace}>.Instance.Serialize({instanceFieldRef}, buffer, ref offset);";
+                }
+
+                // Update deserialization code to use bitset
+                if (isNullable)
+                {
+                    fieldInfo.DeserializeCode = $"if (NullableBitset.IsNull(bitset, {fieldInfo.NullableFieldIndex}))\n" +
+                                                 $"                {instanceFieldRef} = null;\n" +
+                                                 $"            else\n" +
+                                                 $"            {{\n" +
+                                                 $"                EnumSerializer<{fullTypeWithNamespace}>.Instance.Deserialize(out {fullTypeWithNamespace} {localVarName}, buffer, ref offset);\n" +
+                                                 $"                {instanceFieldRef} = {localVarName};\n" +
+                                                 $"            }}";
+                }
+                else
+                {
+                    fieldInfo.DeserializeCode = $"EnumSerializer<{fullTypeWithNamespace}>.Instance.Deserialize(out {fullTypeWithNamespace} {localVarName}, buffer, ref offset);\n" +
+                                               $"            {instanceFieldRef} = {localVarName};";
+                }
+            }
+            else if (fieldInfo.IsYoloSerializable)
+            {
+                var serializerName = $"{unwrappedType.Name}Serializer";
+                var fullTypeName = TypeHelper.GetFullTypeName(unwrappedType);
+                var fullTypeWithNamespace = unwrappedType.Namespace != field.DeclaringType.Namespace ?
+                    $"{unwrappedType.Namespace}.{fullTypeName}" : fullTypeName;
+
+                // Update sizing calculation to handle nulls
+                if (isNullable)
+                {
+                    fieldInfo.SizeCalculation = $"{instanceFieldRef} == null ? 0 : {serializerName}.Instance.GetSize({instanceFieldRef})";
+                }
+                else
+                {
+                    fieldInfo.SizeCalculation = $"{serializerName}.Instance.GetSize({instanceFieldRef})";
+                }
+
+                // Update serialization code to use bitset
+                if (isNullable)
+                {
+                    fieldInfo.SerializeCode = $"if (!NullableBitset.IsNull(bitset, {fieldInfo.NullableFieldIndex}))\n" +
+                                             $"                {serializerName}.Instance.Serialize({instanceFieldRef}, buffer, ref offset);";
+                }
+                else
+                {
+                    fieldInfo.SerializeCode = $"{serializerName}.Instance.Serialize({instanceFieldRef}, buffer, ref offset);";
+                }
+
+                // Update deserialization code to use bitset
+                if (isNullable)
+                {
+                    fieldInfo.DeserializeCode = $"if (NullableBitset.IsNull(bitset, {fieldInfo.NullableFieldIndex}))\n" +
+                                                 $"                {instanceFieldRef} = null;\n" +
+                                                 $"            else\n" +
+                                                 $"            {{\n" +
+                                                 $"                {serializerName}.Instance.Deserialize(out {fullTypeWithNamespace}{nullableMarker} {localVarName}, buffer, ref offset);\n" +
+                                                 $"                {instanceFieldRef} = {localVarName};\n" +
+                                                 $"            }}";
+                }
+                else
+                {
+                    fieldInfo.DeserializeCode = $"{serializerName}.Instance.Deserialize(out {fullTypeWithNamespace}{nullableMarker} {localVarName}, buffer, ref offset);\n" +
+                                               $"            {instanceFieldRef} = {localVarName};";
+                }
+            }
+            else
+            {
+                throw new NotSupportedException($"No serializer available for type {unwrappedType.FullName}");
+            }
         }
     }
 }
