@@ -56,13 +56,11 @@ namespace YoloSerializer.Core.Serializers
 
             
             int size = 0;
-            size += Int32Serializer.Instance.GetSize(playerData.PlayerId);
-                        size += StringSerializer.Instance.GetSize(playerData.PlayerName);
-                        size += Int32Serializer.Instance.GetSize(playerData.Health);
-                        size += PositionSerializer.Instance.GetSize(playerData.Position);
-                        size += BooleanSerializer.Instance.GetSize(playerData.IsActive);
-                        size += Int32Serializer.Instance.GetSize(playerData.Achievements.Count) + playerData.Achievements.Sum(listItem => StringSerializer.Instance.GetSize(listItem));
-                        size += Int32Serializer.Instance.GetSize(playerData.Stats.Count) + playerData.Stats.Sum(kvp => StringSerializer.Instance.GetSize(kvp.Key) + Int32Serializer.Instance.GetSize(kvp.Value));
+            size += 22; // Pre-calculated fixed size for primitive types
+            size += StringSerializer.Instance.GetSize(playerData.PlayerName);
+            size += Int32Serializer.Instance.GetSize(playerData.Achievements.Count) + playerData.Achievements.Sum(listItem => StringSerializer.Instance.GetSize(listItem));
+            size += Int32Serializer.Instance.GetSize(playerData.Stats.Count) + playerData.Stats.Sum(kvp => StringSerializer.Instance.GetSize(kvp.Key) + Int32Serializer.Instance.GetSize(kvp.Value));
+
 
             return size;
         }

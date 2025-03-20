@@ -52,24 +52,9 @@ namespace YoloSerializer.Core.Serializers
 
             
             int size = 0;
-            size += Int32Serializer.Instance.GetSize(allTypesData.Int32Value);
-                        size += Int64Serializer.Instance.GetSize(allTypesData.Int64Value);
-                        size += SingleSerializer.Instance.GetSize(allTypesData.FloatValue);
-                        size += DoubleSerializer.Instance.GetSize(allTypesData.DoubleValue);
-                        size += BooleanSerializer.Instance.GetSize(allTypesData.BoolValue);
-                        size += StringSerializer.Instance.GetSize(allTypesData.StringValue);
-                        size += ByteSerializer.Instance.GetSize(allTypesData.ByteValue);
-                        size += SByteSerializer.Instance.GetSize(allTypesData.SByteValue);
-                        size += CharSerializer.Instance.GetSize(allTypesData.CharValue);
-                        size += Int16Serializer.Instance.GetSize(allTypesData.Int16Value);
-                        size += UInt16Serializer.Instance.GetSize(allTypesData.UInt16Value);
-                        size += UInt32Serializer.Instance.GetSize(allTypesData.UInt32Value);
-                        size += UInt64Serializer.Instance.GetSize(allTypesData.UInt64Value);
-                        size += DecimalSerializer.Instance.GetSize(allTypesData.DecimalValue);
-                        size += DateTimeSerializer.Instance.GetSize(allTypesData.DateTimeValue);
-                        size += TimeSpanSerializer.Instance.GetSize(allTypesData.TimeSpanValue);
-                        size += GuidSerializer.Instance.GetSize(allTypesData.GuidValue);
-                        size += EnumSerializer<TestEnum>.Instance.GetSize(allTypesData.EnumValue);
+            size += 97; // Pre-calculated fixed size for primitive types
+            size += StringSerializer.Instance.GetSize(allTypesData.StringValue);
+
 
             return size;
         }

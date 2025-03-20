@@ -410,10 +410,256 @@ namespace YoloSerializer.Generator
             };
         }
 
+        // Get the fixed size of a primitive type (0 if variable size)
+        private int GetFixedPrimitiveSize(Type type)
+        {
+            if (type == typeof(bool)) return 1;
+            if (type == typeof(byte) || type == typeof(sbyte)) return 1;
+            if (type == typeof(char) || type == typeof(short) || type == typeof(ushort)) return 2;
+            if (type == typeof(int) || type == typeof(uint) || type == typeof(float)) return 4;
+            if (type == typeof(long) || type == typeof(ulong) || type == typeof(double)) return 8;
+            if (type == typeof(decimal)) return 16;
+            if (type == typeof(DateTime)) return 8;
+            if (type == typeof(TimeSpan)) return 8;
+            if (type == typeof(Guid)) return 16;
+            
+            // Handle enums (use underlying type size)
+            if (type.IsEnum)
+            {
+                var underlyingType = Enum.GetUnderlyingType(type);
+                return GetFixedPrimitiveSize(underlyingType);
+            }
+            
+            // Not a fixed-size primitive
+            return 0;
+        }
+        
+        // Check if a property/field has a fixed size
+        private bool HasFixedSize(TemplatePropertyInfo property)
+        {
+            var type = property.PropertyType;
+            
+            // Collections and strings are always variable size
+            if (property.IsList || property.IsDictionary || property.IsArray || type == typeof(string))
+                return false;
+                
+            // Handle primitive types
+            if (GetFixedPrimitiveSize(type) > 0)
+                return true;
+            
+            // Handle custom serializable types that we know have fixed size
+            if (property.IsYoloSerializable && IsFixedSizeType(type))
+                return true;
+                
+            // For other complex types, we conservatively assume variable size
+            return false;
+        }
+        
+        // Cache for types we've determined to have fixed size
+        private HashSet<Type> _fixedSizeTypes = new HashSet<Type>();
+        
+        // Check if a custom serializable type has a fixed size
+        private bool IsFixedSizeType(Type type)
+        {
+            // Quick return for cached results
+            if (_fixedSizeTypes.Contains(type))
+                return true;
+            
+            // Strings and collections are never fixed size
+            if (type == typeof(string) || TypeHelper.IsList(type) || 
+                TypeHelper.IsDictionary(type) || type.IsArray)
+                return false;
+                
+            // Primitive types and enums have fixed size
+            if (type.IsPrimitive || type.IsEnum)
+                return true;
+                
+            // For serializable types, examine their properties
+            if (IsExplicitSerializableType(type))
+            {
+                var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+                var fields = type.GetFields(BindingFlags.Public | BindingFlags.Instance);
+                
+                // Check all properties
+                foreach (var property in properties)
+                {
+                    // If the property is a collection or string, it's not fixed size
+                    if (property.PropertyType == typeof(string) || 
+                        TypeHelper.IsList(property.PropertyType) || 
+                        TypeHelper.IsDictionary(property.PropertyType) || 
+                        property.PropertyType.IsArray)
+                    {
+                        return false;
+                    }
+                    
+                    // If it's a primitive type or enum, it's fixed size
+                    if (property.PropertyType.IsPrimitive || property.PropertyType.IsEnum)
+                        continue;
+                        
+                    // If it's another serializable type, check if that type is fixed size
+                    if (IsExplicitSerializableType(property.PropertyType))
+                    {
+                        // Avoid recursive checks by assuming non-fixed size for now
+                        // We'll handle recursion better when calculating the actual size
+                        if (!_fixedSizeTypes.Contains(property.PropertyType))
+                            return false;
+                    }
+                    else
+                    {
+                        // Non-serializable complex type - conservatively assume variable size
+                        return false;
+                    }
+                }
+                
+                // Check all fields
+                foreach (var field in fields)
+                {
+                    // If the field is a collection or string, it's not fixed size
+                    if (field.FieldType == typeof(string) || 
+                        TypeHelper.IsList(field.FieldType) || 
+                        TypeHelper.IsDictionary(field.FieldType) || 
+                        field.FieldType.IsArray)
+                    {
+                        return false;
+                    }
+                    
+                    // If it's a primitive type or enum, it's fixed size
+                    if (field.FieldType.IsPrimitive || field.FieldType.IsEnum)
+                        continue;
+                        
+                    // If it's another serializable type, check if that type is fixed size
+                    if (IsExplicitSerializableType(field.FieldType))
+                    {
+                        // Avoid recursive checks by assuming non-fixed size for now
+                        if (!_fixedSizeTypes.Contains(field.FieldType))
+                            return false;
+                    }
+                    else
+                    {
+                        // Non-serializable complex type - conservatively assume variable size
+                        return false;
+                    }
+                }
+                
+                // All properties and fields have fixed size
+                _fixedSizeTypes.Add(type);
+                return true;
+            }
+            
+            // Default to false for unknown types
+            return false;
+        }
+        
+        // Calculate the fixed size for a known fixed-size type
+        private int CalculateFixedTypeSize(Type type, HashSet<Type> visitedTypes = null)
+        {
+            // Prevent infinite recursion
+            if (visitedTypes == null)
+                visitedTypes = new HashSet<Type>();
+                
+            if (visitedTypes.Contains(type))
+                return 0; // Return 0 for circular references
+                
+            visitedTypes.Add(type);
+            
+            // Handle primitive types
+            int primitiveSize = GetFixedPrimitiveSize(type);
+            if (primitiveSize > 0)
+                return primitiveSize;
+                
+            // Handle fixed-size serializable types
+            if (IsExplicitSerializableType(type) && IsFixedSizeType(type))
+            {
+                int size = 0;
+                
+                // Add 1 byte for null check
+                size += 1;
+                
+                // Calculate size of all properties
+                var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+                foreach (var property in properties)
+                {
+                    int propertySize = GetFixedPrimitiveSize(property.PropertyType);
+                    if (propertySize > 0)
+                    {
+                        size += propertySize;
+                    }
+                    else if (IsExplicitSerializableType(property.PropertyType) && 
+                             IsFixedSizeType(property.PropertyType))
+                    {
+                        size += CalculateFixedTypeSize(property.PropertyType, visitedTypes);
+                    }
+                }
+                
+                // Calculate size of all fields
+                var fields = type.GetFields(BindingFlags.Public | BindingFlags.Instance);
+                foreach (var field in fields)
+                {
+                    int fieldSize = GetFixedPrimitiveSize(field.FieldType);
+                    if (fieldSize > 0)
+                    {
+                        size += fieldSize;
+                    }
+                    else if (IsExplicitSerializableType(field.FieldType) && 
+                             IsFixedSizeType(field.FieldType))
+                    {
+                        size += CalculateFixedTypeSize(field.FieldType, visitedTypes);
+                    }
+                }
+                
+                return size;
+            }
+            
+            return 0; // Not a fixed-size type
+        }
+
         internal string CreateSizeCalculationCode(List<TemplatePropertyInfo> properties)
         {
-            return string.Join("\n            ", properties.Select(p =>
-                $"size += {p.SizeCalculation};"));
+            // Calculate the total fixed size part
+            int totalFixedSize = 0;
+            var fixedSizeProperties = new List<TemplatePropertyInfo>();
+            var variableSizeProperties = new List<TemplatePropertyInfo>();
+            
+            // Separate fixed and variable size properties
+            foreach (var property in properties)
+            {
+                if (HasFixedSize(property))
+                {
+                    fixedSizeProperties.Add(property);
+                    
+                    // For a primitive, we can determine its serialized size statically
+                    int fixedSize = GetFixedPrimitiveSize(property.PropertyType);
+                    if (fixedSize > 0)
+                    {
+                        totalFixedSize += fixedSize;
+                    }
+                    else if (property.IsYoloSerializable && IsFixedSizeType(property.PropertyType))
+                    {
+                        // For serializable types with fixed size, calculate their serialized size
+                        totalFixedSize += CalculateFixedTypeSize(property.PropertyType);
+                    }
+                }
+                else
+                {
+                    variableSizeProperties.Add(property);
+                }
+            }
+            
+            var sb = new StringBuilder();
+            
+            // If we have fixed size properties, add them as a constant
+            if (totalFixedSize > 0)
+            {
+                sb.AppendLine($"size += {totalFixedSize}; // Pre-calculated fixed size for primitive types");
+            }
+            
+            // Add variable size property calculations
+            foreach (var property in variableSizeProperties)
+            {
+                sb.AppendLine($"size += {property.SizeCalculation};");
+            }
+            
+            return sb.ToString();
         }
 
         internal string CreateSerializeCode(List<TemplatePropertyInfo> properties)
