@@ -33,7 +33,6 @@ namespace YoloSerializer.Benchmarks.CodeGeneration
             // Configure generator settings for benchmark project
             var sourceDir = GetSourceCodeDirectory();
             var outputPath = Path.Combine(sourceDir, "Generated");
-
             var config = new GeneratorConfig
             {
                 OutputPath = outputPath,

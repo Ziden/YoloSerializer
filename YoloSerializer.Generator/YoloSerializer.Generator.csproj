@@ -1,10 +1,28 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
+    <OutputType>Library</OutputType>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    
+    <!-- NuGet Package Information -->
+    <PackageId>YoloSerializer.Generator</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>YourName</Authors>
+    <Company>YourCompany</Company>
+    <Description>Code generator for YoloSerializer - creates specialized serializers at compile time to enable high-performance serialization without reflection.</Description>
+    <PackageTags>serialization;binary;code-generation;unity;il2cpp;dotnet</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://github.com/yourusername/YoloSerializer</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/yourusername/YoloSerializer</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    
+    <!-- Make it a tool package -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>yoloserializer-gen</ToolCommandName>
   </PropertyGroup>
 
   <ItemGroup>
@@ -12,7 +30,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ExampleUsage\YoloSerializer.Example.csproj" />
+    <ProjectReference Include="..\YoloSerializer.Core\YoloSerializer.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 </Project>

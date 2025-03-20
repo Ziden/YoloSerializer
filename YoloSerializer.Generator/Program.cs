@@ -1,23 +1,11 @@
 ﻿using System.Reflection;
 using Scriban;
-using YoloSerializer.Core.Models;
-using YoloSerializer.Core.ModelsYolo;
 using YoloSerializer.Generator.Models;
 
 namespace YoloSerializer.Generator;
 
 public class Program
 {
-    // Define explicitly serializable types here
-    private static readonly Type[] ExplicitSerializableTypes = new[]
-    {
-        typeof(PlayerData),
-        typeof(Node),
-        typeof(Inventory),
-        typeof(Position),
-        typeof(AllTypesData)
-    };
-
     static async Task Main(string[] args)
     {
         var config = ParseCommandLineArgs(args);
@@ -28,13 +16,7 @@ public class Program
         Console.WriteLine($"Output path: {config.OutputPath}");
         Console.WriteLine($"Force regeneration: {config.ForceRegeneration}");
 
-        // Get list of serializable types
-        var serializableTypes = ExplicitSerializableTypes.ToList();
-        Console.WriteLine($"Found {serializableTypes.Count} serializable types");
-
-        // Generate all required files
         var generator = new CodeGenerator();
-        config.ForceRegeneration = true;
         await generator.GenerateSerializers(serializableTypes, config);
 
         Console.WriteLine("Done!");
@@ -45,7 +27,7 @@ public class Program
         // Default configuration
         var config = new GeneratorConfig
         {
-            TargetAssembly = typeof(YoloSerializer.Core.Models.PlayerData).Assembly,
+            //TargetAssembly = typeof(YoloSerializer.Core.Models.PlayerData).Assembly,
             OutputPath = GetDefaultOutputPath(),
             ForceRegeneration = args.Contains("--force") || args.Contains("-f")
         };

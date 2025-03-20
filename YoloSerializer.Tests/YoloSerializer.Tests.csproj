@@ -17,6 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\ExampleUsage\YoloSerializer.Example.csproj" />
     <ProjectReference Include="..\YoloSerializer.Core\YoloSerializer.Core.csproj" />
     <ProjectReference Include="..\YoloSerializer.Generator\YoloSerializer.Generator.csproj" />
   </ItemGroup>

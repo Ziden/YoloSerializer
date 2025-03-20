@@ -1,9 +1,4 @@
-using System;
-using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
-using YoloSerializer.Core;
-using YoloSerializer.Core.Serializers;
-using YoloSerializer.Core.Contracts;
 using YoloSerializer.Generated.Maps;
 using YoloSerializer.Core.Models;
 using YoloSerializer.Core.ModelsYolo;

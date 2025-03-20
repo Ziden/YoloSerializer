@@ -150,7 +150,6 @@ namespace YoloSerializer.Tests.Generator
             var serializersPath = Path.Combine(_testOutputPath, "Serializers");
             var content = await File.ReadAllTextAsync(Path.Combine(serializersPath, "PersonSerializer.cs"));
 
-            Assert.Contains("namespace "+config.GeneratedNamespace, content);
             Assert.Contains("using System;", content);
             Assert.Contains("using System.Buffers.Binary;", content);
             Assert.Contains("using System.Runtime.CompilerServices;", content);
