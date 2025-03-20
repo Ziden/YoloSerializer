@@ -913,13 +913,19 @@ namespace YoloSerializer.Generator
 
             return type switch
             {
-                CollectionType.List => $"Int32Serializer.Instance.GetSize({instancePropRef}.Count) + " +
-                                     $"{instancePropRef}.Sum(listItem => {elementSerializer}.Instance.GetSize(listItem))",
-                CollectionType.Dictionary => $"Int32Serializer.Instance.GetSize({instancePropRef}.Count) + " +
+                CollectionType.List => $"({instancePropRef} == null ? sizeof(int) : " +
+                                     $"Int32Serializer.Instance.GetSize({instancePropRef}.Count) + " +
+                                     $"{instancePropRef}.Sum(listItem => {elementSerializer}.Instance.GetSize(listItem)))",
+                
+                CollectionType.Dictionary => $"({instancePropRef} == null ? sizeof(int) : " +
+                                          $"Int32Serializer.Instance.GetSize({instancePropRef}.Count) + " +
                                           $"{instancePropRef}.Sum(kvp => {keySerializer}.Instance.GetSize(kvp.Key) + " +
-                                          $"{elementSerializer}.Instance.GetSize(kvp.Value))",
-                CollectionType.Array => $"Int32Serializer.Instance.GetSize({instancePropRef}.Length) + " +
-                                      $"{instancePropRef}.Sum(arrayItem => {elementSerializer}.Instance.GetSize(arrayItem))",
+                                          $"{elementSerializer}.Instance.GetSize(kvp.Value)))",
+                
+                CollectionType.Array => $"({instancePropRef} == null ? sizeof(int) : " +
+                                      $"Int32Serializer.Instance.GetSize({instancePropRef}.Length) + " +
+                                      $"{instancePropRef}.Sum(arrayItem => {elementSerializer}.Instance.GetSize(arrayItem)))",
+                
                 _ => throw new ArgumentException("Invalid collection type")
             };
         }
@@ -954,22 +960,37 @@ namespace YoloSerializer.Generator
 
             return type switch
             {
-                CollectionType.List => $"Int32Serializer.Instance.Serialize({instancePropRef}.Count, buffer, ref offset);\n" +
-                                     $"            foreach (var listItem in {instancePropRef})\n" +
-                                     $"            {{\n" +
-                                     $"                {elementSerializer}.Instance.Serialize(listItem, buffer, ref offset);\n" +
+                CollectionType.List => $"if ({instancePropRef} == null) {{\n" +
+                                     $"                Int32Serializer.Instance.Serialize(0, buffer, ref offset);\n" +
+                                     $"            }} else {{\n" +
+                                     $"                Int32Serializer.Instance.Serialize({instancePropRef}.Count, buffer, ref offset);\n" +
+                                     $"                foreach (var listItem in {instancePropRef})\n" +
+                                     $"                {{\n" +
+                                     $"                    {elementSerializer}.Instance.Serialize(listItem, buffer, ref offset);\n" +
+                                     $"                }}\n" +
                                      $"            }}",
-                CollectionType.Dictionary => $"Int32Serializer.Instance.Serialize({instancePropRef}.Count, buffer, ref offset);\n" +
-                                          $"            foreach (var kvp in {instancePropRef})\n" +
-                                          $"            {{\n" +
-                                          $"                {keySerializer}.Instance.Serialize(kvp.Key, buffer, ref offset);\n" +
-                                          $"                {elementSerializer}.Instance.Serialize(kvp.Value, buffer, ref offset);\n" +
+                                     
+                CollectionType.Dictionary => $"if ({instancePropRef} == null) {{\n" +
+                                          $"                Int32Serializer.Instance.Serialize(0, buffer, ref offset);\n" +
+                                          $"            }} else {{\n" +
+                                          $"                Int32Serializer.Instance.Serialize({instancePropRef}.Count, buffer, ref offset);\n" +
+                                          $"                foreach (var kvp in {instancePropRef})\n" +
+                                          $"                {{\n" +
+                                          $"                    {keySerializer}.Instance.Serialize(kvp.Key, buffer, ref offset);\n" +
+                                          $"                    {elementSerializer}.Instance.Serialize(kvp.Value, buffer, ref offset);\n" +
+                                          $"                }}\n" +
                                           $"            }}",
-                CollectionType.Array => $"Int32Serializer.Instance.Serialize({instancePropRef}.Length, buffer, ref offset);\n" +
-                                      $"            foreach (var arrayItem in {instancePropRef})\n" +
-                                      $"            {{\n" +
-                                      $"                {elementSerializer}.Instance.Serialize(arrayItem, buffer, ref offset);\n" +
+                                          
+                CollectionType.Array => $"if ({instancePropRef} == null) {{\n" +
+                                      $"                Int32Serializer.Instance.Serialize(0, buffer, ref offset);\n" +
+                                      $"            }} else {{\n" +
+                                      $"                Int32Serializer.Instance.Serialize({instancePropRef}.Length, buffer, ref offset);\n" +
+                                      $"                foreach (var arrayItem in {instancePropRef})\n" +
+                                      $"                {{\n" +
+                                      $"                    {elementSerializer}.Instance.Serialize(arrayItem, buffer, ref offset);\n" +
+                                      $"                }}\n" +
                                       $"            }}",
+                                      
                 _ => throw new ArgumentException("Invalid collection type")
             };
         }
@@ -1008,14 +1029,20 @@ namespace YoloSerializer.Generator
             return type switch
             {
                 CollectionType.List => $"Int32Serializer.Instance.Deserialize(out int {localVarName}Count, buffer, ref offset);\n" +
-                                     $"            {instancePropRef}.Clear();\n" +
+                                     $"            if ({instancePropRef} == null)\n" +
+                                     $"                {instancePropRef} = new List<{fullElementTypeName}>();\n" +
+                                     $"            else\n" +
+                                     $"                {instancePropRef}.Clear();\n" +
                                      $"            for (int i = 0; i < {localVarName}Count; i++)\n" +
                                      $"            {{\n" +
                                      $"                {elementSerializer}.Instance.Deserialize(out {fullElementTypeName} listItem, buffer, ref offset);\n" +
                                      $"                {instancePropRef}.Add(listItem);\n" +
                                      $"            }}",
                 CollectionType.Dictionary => $"Int32Serializer.Instance.Deserialize(out int {localVarName}Count, buffer, ref offset);\n" +
-                                           $"            {instancePropRef}.Clear();\n" +
+                                           $"            if ({instancePropRef} == null)\n" +
+                                           $"                {instancePropRef} = new Dictionary<{fullKeyTypeName}, {fullElementTypeName}>();\n" +
+                                           $"            else\n" +
+                                           $"                {instancePropRef}.Clear();\n" +
                                            $"            for (int i = 0; i < {localVarName}Count; i++)\n" +
                                            $"            {{\n" +
                                            $"                {keySerializer}.Instance.Deserialize(out {fullKeyTypeName} key, buffer, ref offset);\n" +
