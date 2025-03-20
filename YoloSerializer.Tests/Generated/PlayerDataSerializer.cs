@@ -102,7 +102,7 @@ namespace YoloSerializer.Core.Serializers
 
             Int32Serializer.Instance.Deserialize(out int _local_playerId, buffer, ref offset);
                         playerData.PlayerId = _local_playerId;
-                        StringSerializer.Instance.Deserialize(out string? _local_playerName, buffer, ref offset);
+                        StringSerializer.Instance.Deserialize(out string _local_playerName, buffer, ref offset);
                         playerData.PlayerName = _local_playerName;
                         Int32Serializer.Instance.Deserialize(out int _local_health, buffer, ref offset);
                         playerData.Health = _local_health;

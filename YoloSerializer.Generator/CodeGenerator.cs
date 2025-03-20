@@ -14,6 +14,71 @@ namespace YoloSerializer.Generator
     {
         private Type[] _serializableTypes;
 
+        private static class TypeHelper
+        {
+            public static bool IsList(Type type) => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>);
+            public static bool IsDictionary(Type type) => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>);
+            public static bool IsNullable(Type type) => Nullable.GetUnderlyingType(type) != null;
+            public static bool IsReferenceType(Type type) => !type.IsValueType;
+            public static Type GetElementType(Type type) => type switch
+            {
+                var t when IsList(t) => t.GetGenericArguments()[0],
+                { IsArray: true } => type.GetElementType(),
+                _ => null
+            };
+            public static Type GetDictionaryKeyType(Type type) => IsDictionary(type) ? type.GetGenericArguments()[0] : null;
+            public static Type GetDictionaryValueType(Type type) => IsDictionary(type) ? type.GetGenericArguments()[1] : null;
+            public static string GetInstanceVarName(Type type) => char.ToLowerInvariant(type.Name[0]) + type.Name.Substring(1);
+            public static string GetInstanceVarName(string name) => char.ToLowerInvariant(name[0]) + name.Substring(1);
+            public static string GetFullTypeName(Type type) => type switch
+            {
+                null => "object",
+                { IsPrimitive: true } or { FullName: "System.String" } => type.Name,
+                { IsEnum: true } => type.Name,
+                var t when IsList(t) => $"List<{GetFullTypeName(GetElementType(t))}>",
+                var t when IsDictionary(t) => $"Dictionary<{GetFullTypeName(GetDictionaryKeyType(t))}, {GetFullTypeName(GetDictionaryValueType(t))}>",
+                { IsArray: true } => $"{GetFullTypeName(type.GetElementType())}[]",
+                _ => type.Name
+            };
+            public static string GetSerializerForType(Type type) => type switch
+            {
+                { IsPrimitive: true } or { FullName: "System.String" } => $"{type.Name}Serializer",
+                { IsEnum: true } => "EnumSerializer",
+                var t when IsList(t) => "ListSerializer",
+                var t when IsDictionary(t) => "DictionarySerializer",
+                { IsArray: true } => "ArraySerializer",
+                _ => $"{type.Name}Serializer"
+            };
+        }
+
+        private enum CollectionType
+        {
+            List,
+            Dictionary,
+            Array
+        }
+
+        private static readonly Dictionary<Type, (string Serializer, string TypeName)> PrimitiveTypeMap = new()
+        {
+            { typeof(int), ("Int32Serializer", "int") },
+            { typeof(float), ("FloatSerializer", "float") },
+            { typeof(double), ("DoubleSerializer", "double") },
+            { typeof(long), ("Int64Serializer", "long") },
+            { typeof(bool), ("BooleanSerializer", "bool") },
+            { typeof(string), ("StringSerializer", "string") },
+            { typeof(byte), ("ByteSerializer", "byte") },
+            { typeof(sbyte), ("SByteSerializer", "sbyte") },
+            { typeof(char), ("CharSerializer", "char") },
+            { typeof(short), ("Int16Serializer", "short") },
+            { typeof(ushort), ("UInt16Serializer", "ushort") },
+            { typeof(uint), ("UInt32Serializer", "uint") },
+            { typeof(ulong), ("UInt64Serializer", "ulong") },
+            { typeof(decimal), ("DecimalSerializer", "decimal") },
+            { typeof(DateTime), ("DateTimeSerializer", "DateTime") },
+            { typeof(TimeSpan), ("TimeSpanSerializer", "TimeSpan") },
+            { typeof(Guid), ("GuidSerializer", "Guid") }
+        };
+
         public async Task GenerateSerializers(List<Type> serializableTypes, Template template, GeneratorConfig config)
         {
             _serializableTypes = serializableTypes.ToArray();
@@ -443,37 +508,36 @@ namespace YoloSerializer.Generator
 
         internal TemplatePropertyInfo BuildPropertyInfo(System.Reflection.PropertyInfo property)
         {
+            var propertyType = property.PropertyType;
+            var unwrappedType = Nullable.GetUnderlyingType(propertyType) ?? propertyType;
+            
             var propertyInfo = new TemplatePropertyInfo
             {
                 Name = property.Name,
-                Type = GetFullTypeName(property.PropertyType),
-                PropertyType = property.PropertyType,
-                IsList = IsList(property.PropertyType),
-                IsDictionary = IsDictionary(property.PropertyType),
-                IsArray = property.PropertyType.IsArray,
-                IsNullable = IsNullableType(property.PropertyType),
-                IsYoloSerializable = IsExplicitSerializableType(property.PropertyType)
+                Type = TypeHelper.GetFullTypeName(propertyType),
+                PropertyType = propertyType,
+                IsList = TypeHelper.IsList(unwrappedType),
+                IsDictionary = TypeHelper.IsDictionary(unwrappedType),
+                IsArray = unwrappedType.IsArray,
+                IsNullable = TypeHelper.IsNullable(propertyType),
+                IsYoloSerializable = IsExplicitSerializableType(unwrappedType)
             };
 
             if (propertyInfo.IsList)
             {
-                var elementType = GetElementType(property.PropertyType);
-                propertyInfo.ElementType = elementType?.Name;
-                SetListPropertyCodeAndSize(propertyInfo, property);
+                propertyInfo.ElementType = TypeHelper.GetElementType(unwrappedType)?.Name;
+                SetCollectionPropertyCodeAndSize(propertyInfo, property, CollectionType.List);
             }
             else if (propertyInfo.IsDictionary)
             {
-                var keyType = GetDictionaryKeyType(property.PropertyType);
-                var valueType = GetDictionaryValueType(property.PropertyType);
-                propertyInfo.KeyType = keyType?.Name;
-                propertyInfo.ValueType = valueType?.Name;
-                SetDictionaryPropertyCodeAndSize(propertyInfo, property);
+                propertyInfo.KeyType = TypeHelper.GetDictionaryKeyType(unwrappedType)?.Name;
+                propertyInfo.ValueType = TypeHelper.GetDictionaryValueType(unwrappedType)?.Name;
+                SetCollectionPropertyCodeAndSize(propertyInfo, property, CollectionType.Dictionary);
             }
             else if (propertyInfo.IsArray)
             {
-                var elementType = property.PropertyType.GetElementType();
-                propertyInfo.ElementType = elementType?.Name;
-                SetArrayPropertyCodeAndSize(propertyInfo, property);
+                propertyInfo.ElementType = unwrappedType.GetElementType()?.Name;
+                SetCollectionPropertyCodeAndSize(propertyInfo, property, CollectionType.Array);
             }
             else
             {
@@ -514,149 +578,37 @@ namespace YoloSerializer.Generator
 
         internal void SetStandardPropertyCodeAndSize(TemplatePropertyInfo propertyInfo, System.Reflection.PropertyInfo property)
         {
-            Type propertyType = property.PropertyType;
-            Type unwrappedType = Nullable.GetUnderlyingType(propertyType) ?? propertyType;
-            bool isNullable = propertyType != unwrappedType || !propertyType.IsValueType;
-            string nullableMarker = isNullable ? "?" : "";
-            string propName = property.Name;
-            string instancePropRef = $"{char.ToLowerInvariant(property.DeclaringType.Name[0])}{property.DeclaringType.Name.Substring(1)}.{propName}";
-            string localVarName = "_local_" + char.ToLowerInvariant(propName[0]) + propName.Substring(1);
+            var propertyType = property.PropertyType;
+            var unwrappedType = Nullable.GetUnderlyingType(propertyType) ?? propertyType;
+            var isNullable = propertyType != unwrappedType || !propertyType.IsValueType;
+            var nullableMarker = isNullable ? "?" : "";
+            var propName = property.Name;
+            var instancePropRef = $"{TypeHelper.GetInstanceVarName(property.DeclaringType.Name)}.{propName}";
+            var localVarName = "_local_" + TypeHelper.GetInstanceVarName(propName);
 
-            // Handle primitive types
-            if (unwrappedType == typeof(int))
+            if (PrimitiveTypeMap.TryGetValue(unwrappedType, out var typeInfo))
             {
-                propertyInfo.SizeCalculation = $"Int32Serializer.Instance.GetSize({instancePropRef})";
-                propertyInfo.SerializeCode = $"Int32Serializer.Instance.Serialize({instancePropRef}, buffer, ref offset);";
-                propertyInfo.DeserializeCode = $"Int32Serializer.Instance.Deserialize(out int {localVarName}, buffer, ref offset);\n" +
-                                               $"            {instancePropRef} = {localVarName};";
-            }
-            else if (unwrappedType == typeof(float))
-            {
-                propertyInfo.SizeCalculation = $"FloatSerializer.Instance.GetSize({instancePropRef})";
-                propertyInfo.SerializeCode = $"FloatSerializer.Instance.Serialize({instancePropRef}, buffer, ref offset);";
-                propertyInfo.DeserializeCode = $"FloatSerializer.Instance.Deserialize(out float {localVarName}, buffer, ref offset);\n" +
-                                               $"            {instancePropRef} = {localVarName};";
-            }
-            else if (unwrappedType == typeof(double))
-            {
-                propertyInfo.SizeCalculation = $"DoubleSerializer.Instance.GetSize({instancePropRef})";
-                propertyInfo.SerializeCode = $"DoubleSerializer.Instance.Serialize({instancePropRef}, buffer, ref offset);";
-                propertyInfo.DeserializeCode = $"DoubleSerializer.Instance.Deserialize(out double {localVarName}, buffer, ref offset);\n" +
-                                               $"            {instancePropRef} = {localVarName};";
-            }
-            else if (unwrappedType == typeof(long))
-            {
-                propertyInfo.SizeCalculation = $"Int64Serializer.Instance.GetSize({instancePropRef})";
-                propertyInfo.SerializeCode = $"Int64Serializer.Instance.Serialize({instancePropRef}, buffer, ref offset);";
-                propertyInfo.DeserializeCode = $"Int64Serializer.Instance.Deserialize(out long {localVarName}, buffer, ref offset);\n" +
-                                               $"            {instancePropRef} = {localVarName};";
-            }
-            else if (unwrappedType == typeof(bool))
-            {
-                propertyInfo.SizeCalculation = $"BooleanSerializer.Instance.GetSize({instancePropRef})";
-                propertyInfo.SerializeCode = $"BooleanSerializer.Instance.Serialize({instancePropRef}, buffer, ref offset);";
-                propertyInfo.DeserializeCode = $"BooleanSerializer.Instance.Deserialize(out bool {localVarName}, buffer, ref offset);\n" +
-                                               $"            {instancePropRef} = {localVarName};";
-            }
-            else if (unwrappedType == typeof(string))
-            {
-                propertyInfo.SizeCalculation = $"StringSerializer.Instance.GetSize({instancePropRef})";
-                propertyInfo.SerializeCode = $"StringSerializer.Instance.Serialize({instancePropRef}, buffer, ref offset);";
-                propertyInfo.DeserializeCode = $"StringSerializer.Instance.Deserialize(out string? {localVarName}, buffer, ref offset);\n" +
-                                               $"            {instancePropRef} = {localVarName};";
-            }
-            // New primitive types
-            else if (unwrappedType == typeof(byte))
-            {
-                propertyInfo.SizeCalculation = $"ByteSerializer.Instance.GetSize({instancePropRef})";
-                propertyInfo.SerializeCode = $"ByteSerializer.Instance.Serialize({instancePropRef}, buffer, ref offset);";
-                propertyInfo.DeserializeCode = $"ByteSerializer.Instance.Deserialize(out byte {localVarName}, buffer, ref offset);\n" +
-                                               $"            {instancePropRef} = {localVarName};";
-            }
-            else if (unwrappedType == typeof(sbyte))
-            {
-                propertyInfo.SizeCalculation = $"SByteSerializer.Instance.GetSize({instancePropRef})";
-                propertyInfo.SerializeCode = $"SByteSerializer.Instance.Serialize({instancePropRef}, buffer, ref offset);";
-                propertyInfo.DeserializeCode = $"SByteSerializer.Instance.Deserialize(out sbyte {localVarName}, buffer, ref offset);\n" +
-                                               $"            {instancePropRef} = {localVarName};";
-            }
-            else if (unwrappedType == typeof(char))
-            {
-                propertyInfo.SizeCalculation = $"CharSerializer.Instance.GetSize({instancePropRef})";
-                propertyInfo.SerializeCode = $"CharSerializer.Instance.Serialize({instancePropRef}, buffer, ref offset);";
-                propertyInfo.DeserializeCode = $"CharSerializer.Instance.Deserialize(out char {localVarName}, buffer, ref offset);\n" +
-                                               $"            {instancePropRef} = {localVarName};";
-            }
-            else if (unwrappedType == typeof(short))
-            {
-                propertyInfo.SizeCalculation = $"Int16Serializer.Instance.GetSize({instancePropRef})";
-                propertyInfo.SerializeCode = $"Int16Serializer.Instance.Serialize({instancePropRef}, buffer, ref offset);";
-                propertyInfo.DeserializeCode = $"Int16Serializer.Instance.Deserialize(out short {localVarName}, buffer, ref offset);\n" +
-                                               $"            {instancePropRef} = {localVarName};";
-            }
-            else if (unwrappedType == typeof(ushort))
-            {
-                propertyInfo.SizeCalculation = $"UInt16Serializer.Instance.GetSize({instancePropRef})";
-                propertyInfo.SerializeCode = $"UInt16Serializer.Instance.Serialize({instancePropRef}, buffer, ref offset);";
-                propertyInfo.DeserializeCode = $"UInt16Serializer.Instance.Deserialize(out ushort {localVarName}, buffer, ref offset);\n" +
-                                               $"            {instancePropRef} = {localVarName};";
-            }
-            else if (unwrappedType == typeof(uint))
-            {
-                propertyInfo.SizeCalculation = $"UInt32Serializer.Instance.GetSize({instancePropRef})";
-                propertyInfo.SerializeCode = $"UInt32Serializer.Instance.Serialize({instancePropRef}, buffer, ref offset);";
-                propertyInfo.DeserializeCode = $"UInt32Serializer.Instance.Deserialize(out uint {localVarName}, buffer, ref offset);\n" +
-                                               $"            {instancePropRef} = {localVarName};";
-            }
-            else if (unwrappedType == typeof(ulong))
-            {
-                propertyInfo.SizeCalculation = $"UInt64Serializer.Instance.GetSize({instancePropRef})";
-                propertyInfo.SerializeCode = $"UInt64Serializer.Instance.Serialize({instancePropRef}, buffer, ref offset);";
-                propertyInfo.DeserializeCode = $"UInt64Serializer.Instance.Deserialize(out ulong {localVarName}, buffer, ref offset);\n" +
-                                               $"            {instancePropRef} = {localVarName};";
-            }
-            else if (unwrappedType == typeof(decimal))
-            {
-                propertyInfo.SizeCalculation = $"DecimalSerializer.Instance.GetSize({instancePropRef})";
-                propertyInfo.SerializeCode = $"DecimalSerializer.Instance.Serialize({instancePropRef}, buffer, ref offset);";
-                propertyInfo.DeserializeCode = $"DecimalSerializer.Instance.Deserialize(out decimal {localVarName}, buffer, ref offset);\n" +
-                                               $"            {instancePropRef} = {localVarName};";
-            }
-            else if (unwrappedType == typeof(DateTime))
-            {
-                propertyInfo.SizeCalculation = $"DateTimeSerializer.Instance.GetSize({instancePropRef})";
-                propertyInfo.SerializeCode = $"DateTimeSerializer.Instance.Serialize({instancePropRef}, buffer, ref offset);";
-                propertyInfo.DeserializeCode = $"DateTimeSerializer.Instance.Deserialize(out DateTime {localVarName}, buffer, ref offset);\n" +
-                                               $"            {instancePropRef} = {localVarName};";
-            }
-            else if (unwrappedType == typeof(TimeSpan))
-            {
-                propertyInfo.SizeCalculation = $"TimeSpanSerializer.Instance.GetSize({instancePropRef})";
-                propertyInfo.SerializeCode = $"TimeSpanSerializer.Instance.Serialize({instancePropRef}, buffer, ref offset);";
-                propertyInfo.DeserializeCode = $"TimeSpanSerializer.Instance.Deserialize(out TimeSpan {localVarName}, buffer, ref offset);\n" +
-                                               $"            {instancePropRef} = {localVarName};";
-            }
-            else if (unwrappedType == typeof(Guid))
-            {
-                propertyInfo.SizeCalculation = $"GuidSerializer.Instance.GetSize({instancePropRef})";
-                propertyInfo.SerializeCode = $"GuidSerializer.Instance.Serialize({instancePropRef}, buffer, ref offset);";
-                propertyInfo.DeserializeCode = $"GuidSerializer.Instance.Deserialize(out Guid {localVarName}, buffer, ref offset);\n" +
-                                               $"            {instancePropRef} = {localVarName};";
+                propertyInfo.SizeCalculation = $"{typeInfo.Serializer}.Instance.GetSize({instancePropRef})";
+                propertyInfo.SerializeCode = $"{typeInfo.Serializer}.Instance.Serialize({instancePropRef}, buffer, ref offset);";
+                propertyInfo.DeserializeCode = $"{typeInfo.Serializer}.Instance.Deserialize(out {typeInfo.TypeName} {localVarName}, buffer, ref offset);\n" +
+                                           $"            {instancePropRef} = {localVarName};";
             }
             else if (unwrappedType.IsEnum)
             {
-                propertyInfo.SizeCalculation = $"EnumSerializer<{GetFullTypeName(unwrappedType)}>.Instance.GetSize({instancePropRef})";
-                propertyInfo.SerializeCode = $"EnumSerializer<{GetFullTypeName(unwrappedType)}>.Instance.Serialize({instancePropRef}, buffer, ref offset);";
-                propertyInfo.DeserializeCode = $"EnumSerializer<{GetFullTypeName(unwrappedType)}>.Instance.Deserialize(out {GetFullTypeName(unwrappedType)} {localVarName}, buffer, ref offset);\n" +
-                                               $"            {instancePropRef} = {localVarName};";
+                var fullTypeName = TypeHelper.GetFullTypeName(unwrappedType);
+                propertyInfo.SizeCalculation = $"EnumSerializer<{fullTypeName}>.Instance.GetSize({instancePropRef})";
+                propertyInfo.SerializeCode = $"EnumSerializer<{fullTypeName}>.Instance.Serialize({instancePropRef}, buffer, ref offset);";
+                propertyInfo.DeserializeCode = $"EnumSerializer<{fullTypeName}>.Instance.Deserialize(out {fullTypeName} {localVarName}, buffer, ref offset);\n" +
+                                           $"            {instancePropRef} = {localVarName};";
             }
             else if (propertyInfo.IsYoloSerializable)
             {
-                string serializerName = $"{unwrappedType.Name}Serializer";
+                var serializerName = $"{unwrappedType.Name}Serializer";
+                var fullTypeName = TypeHelper.GetFullTypeName(unwrappedType);
                 propertyInfo.SizeCalculation = $"{serializerName}.Instance.GetSize({instancePropRef})";
                 propertyInfo.SerializeCode = $"{serializerName}.Instance.Serialize({instancePropRef}, buffer, ref offset);";
-                propertyInfo.DeserializeCode = $"{serializerName}.Instance.Deserialize(out {GetFullTypeName(unwrappedType)}{nullableMarker} {localVarName}, buffer, ref offset);\n" +
-                                               $"            {instancePropRef} = {localVarName};";
+                propertyInfo.DeserializeCode = $"{serializerName}.Instance.Deserialize(out {fullTypeName}{nullableMarker} {localVarName}, buffer, ref offset);\n" +
+                                           $"            {instancePropRef} = {localVarName};";
             }
             else
             {
@@ -664,127 +616,136 @@ namespace YoloSerializer.Generator
             }
         }
 
+        private void SetCollectionPropertyCodeAndSize(TemplatePropertyInfo propertyInfo, PropertyInfo property, CollectionType type)
+        {
+            var elementType = type switch
+            {
+                CollectionType.List => TypeHelper.GetElementType(property.PropertyType),
+                CollectionType.Dictionary => TypeHelper.GetDictionaryValueType(property.PropertyType),
+                CollectionType.Array => property.PropertyType.GetElementType(),
+                _ => throw new ArgumentException("Invalid collection type")
+            };
+
+            var keyType = type == CollectionType.Dictionary ? TypeHelper.GetDictionaryKeyType(property.PropertyType) : null;
+            
+            var propName = property.Name;
+            var instancePropRef = $"{TypeHelper.GetInstanceVarName(property.DeclaringType.Name)}.{propName}";
+            var localVarName = "_local_" + TypeHelper.GetInstanceVarName(propName);
+
+            // Generate size calculation
+            propertyInfo.SizeCalculation = GenerateCollectionSizeCalculation(instancePropRef, elementType, keyType, type);
+
+            // Generate serialization code
+            propertyInfo.SerializeCode = GenerateCollectionSerializationCode(instancePropRef, elementType, keyType, type);
+
+            // Generate deserialization code
+            propertyInfo.DeserializeCode = GenerateCollectionDeserializationCode(instancePropRef, elementType, keyType, localVarName, type);
+        }
+
+        private string GenerateCollectionSizeCalculation(string instancePropRef, Type elementType, Type keyType, CollectionType type)
+        {
+            var elementSerializer = TypeHelper.GetSerializerForType(elementType);
+            var keySerializer = keyType != null ? TypeHelper.GetSerializerForType(keyType) : null;
+
+            return type switch
+            {
+                CollectionType.List => $"Int32Serializer.Instance.GetSize({instancePropRef}.Count) + " +
+                                     $"{instancePropRef}.Sum(listItem => {elementSerializer}.Instance.GetSize(listItem))",
+                CollectionType.Dictionary => $"Int32Serializer.Instance.GetSize({instancePropRef}.Count) + " +
+                                          $"{instancePropRef}.Sum(kvp => {keySerializer}.Instance.GetSize(kvp.Key) + " +
+                                          $"{elementSerializer}.Instance.GetSize(kvp.Value))",
+                CollectionType.Array => $"Int32Serializer.Instance.GetSize({instancePropRef}.Length) + " +
+                                      $"{instancePropRef}.Sum(arrayItem => {elementSerializer}.Instance.GetSize(arrayItem))",
+                _ => throw new ArgumentException("Invalid collection type")
+            };
+        }
+
+        private string GenerateCollectionSerializationCode(string instancePropRef, Type elementType, Type keyType, CollectionType type)
+        {
+            var elementSerializer = TypeHelper.GetSerializerForType(elementType);
+            var keySerializer = keyType != null ? TypeHelper.GetSerializerForType(keyType) : null;
+
+            return type switch
+            {
+                CollectionType.List => $"Int32Serializer.Instance.Serialize({instancePropRef}.Count, buffer, ref offset);\n" +
+                                     $"            foreach (var listItem in {instancePropRef})\n" +
+                                     $"            {{\n" +
+                                     $"                {elementSerializer}.Instance.Serialize(listItem, buffer, ref offset);\n" +
+                                     $"            }}",
+                CollectionType.Dictionary => $"Int32Serializer.Instance.Serialize({instancePropRef}.Count, buffer, ref offset);\n" +
+                                          $"            foreach (var kvp in {instancePropRef})\n" +
+                                          $"            {{\n" +
+                                          $"                {keySerializer}.Instance.Serialize(kvp.Key, buffer, ref offset);\n" +
+                                          $"                {elementSerializer}.Instance.Serialize(kvp.Value, buffer, ref offset);\n" +
+                                          $"            }}",
+                CollectionType.Array => $"Int32Serializer.Instance.Serialize({instancePropRef}.Length, buffer, ref offset);\n" +
+                                      $"            foreach (var arrayItem in {instancePropRef})\n" +
+                                      $"            {{\n" +
+                                      $"                {elementSerializer}.Instance.Serialize(arrayItem, buffer, ref offset);\n" +
+                                      $"            }}",
+                _ => throw new ArgumentException("Invalid collection type")
+            };
+        }
+
+        private string GenerateCollectionDeserializationCode(string instancePropRef, Type elementType, Type keyType, string localVarName, CollectionType type)
+        {
+            var elementSerializer = TypeHelper.GetSerializerForType(elementType);
+            var keySerializer = keyType != null ? TypeHelper.GetSerializerForType(keyType) : null;
+            var elementTypeName = TypeHelper.GetFullTypeName(elementType);
+            var keyTypeName = keyType != null ? TypeHelper.GetFullTypeName(keyType) : null;
+
+            return type switch
+            {
+                CollectionType.List => $"Int32Serializer.Instance.Deserialize(out int {localVarName}Count, buffer, ref offset);\n" +
+                                     $"            {instancePropRef}.Clear();\n" +
+                                     $"            for (int i = 0; i < {localVarName}Count; i++)\n" +
+                                     $"            {{\n" +
+                                     $"                {elementSerializer}.Instance.Deserialize(out {elementTypeName} listItem, buffer, ref offset);\n" +
+                                     $"                {instancePropRef}.Add(listItem);\n" +
+                                     $"            }}",
+                CollectionType.Dictionary => $"Int32Serializer.Instance.Deserialize(out int {localVarName}Count, buffer, ref offset);\n" +
+                                           $"            {instancePropRef}.Clear();\n" +
+                                           $"            for (int i = 0; i < {localVarName}Count; i++)\n" +
+                                           $"            {{\n" +
+                                           $"                {keySerializer}.Instance.Deserialize(out {keyTypeName} key, buffer, ref offset);\n" +
+                                           $"                {elementSerializer}.Instance.Deserialize(out {elementTypeName} dictValue, buffer, ref offset);\n" +
+                                           $"                {instancePropRef}[key] = dictValue;\n" +
+                                           $"            }}",
+                CollectionType.Array => $"Int32Serializer.Instance.Deserialize(out int {localVarName}Length, buffer, ref offset);\n" +
+                                      $"            {instancePropRef} = new {elementTypeName}[{localVarName}Length];\n" +
+                                      $"            for (int i = 0; i < {localVarName}Length; i++)\n" +
+                                      $"            {{\n" +
+                                      $"                {elementSerializer}.Instance.Deserialize(out {elementTypeName} arrayItem, buffer, ref offset);\n" +
+                                      $"                {instancePropRef}[i] = arrayItem;\n" +
+                                      $"            }}",
+                _ => throw new ArgumentException("Invalid collection type")
+            };
+        }
+
         internal void SetListPropertyCodeAndSize(TemplatePropertyInfo propertyInfo, System.Reflection.PropertyInfo property)
         {
-            Type propertyType = property.PropertyType;
-            Type unwrappedType = Nullable.GetUnderlyingType(propertyType) ?? propertyType;
-            var elementType = unwrappedType.GetGenericArguments()[0];
-
-            string propName = property.Name;
-            string instancePropRef = $"{char.ToLowerInvariant(property.DeclaringType.Name[0])}{property.DeclaringType.Name.Substring(1)}.{propName}";
-            string localVarName = "_local_" + char.ToLowerInvariant(propName[0]) + propName.Substring(1);
-
-            propertyInfo.SizeCalculation = $"Int32Serializer.Instance.GetSize({instancePropRef}.Count) + " +
-                                            $"{instancePropRef}.Sum(listItem => {GetSerializerForType(elementType)}.Instance.GetSize(listItem))";
-
-            propertyInfo.SerializeCode =
-                $"Int32Serializer.Instance.Serialize({instancePropRef}.Count, buffer, ref offset);\n" +
-                $"            foreach (var listItem in {instancePropRef})\n" +
-                $"            {{\n" +
-                $"                {GetSerializerForType(elementType)}.Instance.Serialize(listItem, buffer, ref offset);\n" +
-                $"            }}";
-
-            propertyInfo.DeserializeCode =
-                $"Int32Serializer.Instance.Deserialize(out int {localVarName}Count, buffer, ref offset);\n" +
-                $"            {instancePropRef}.Clear();\n" +
-                $"            for (int i = 0; i < {localVarName}Count; i++)\n" +
-                $"            {{\n" +
-                $"                {GetSerializerForType(elementType)}.Instance.Deserialize(out {GetFullTypeName(elementType)} listItem, buffer, ref offset);\n" +
-                $"                {instancePropRef}.Add(listItem);\n" +
-                $"            }}";
+            SetCollectionPropertyCodeAndSize(propertyInfo, property, CollectionType.List);
         }
 
         internal void SetDictionaryPropertyCodeAndSize(TemplatePropertyInfo propertyInfo, System.Reflection.PropertyInfo property)
         {
-            Type propertyType = property.PropertyType;
-            Type unwrappedType = Nullable.GetUnderlyingType(propertyType) ?? propertyType;
-            var genericArgs = unwrappedType.GetGenericArguments();
-            var keyType = genericArgs[0];
-            var valueType = genericArgs[1];
-
-            string propName = property.Name;
-            string instancePropRef = $"{char.ToLowerInvariant(property.DeclaringType.Name[0])}{property.DeclaringType.Name.Substring(1)}.{propName}";
-            string localVarName = "_local_" + char.ToLowerInvariant(propName[0]) + propName.Substring(1);
-
-            propertyInfo.SizeCalculation =
-                $"Int32Serializer.Instance.GetSize({instancePropRef}.Count) + " +
-                $"{instancePropRef}.Sum(kvp => {GetSerializerForType(keyType)}.Instance.GetSize(kvp.Key) + " +
-                $"{GetSerializerForType(valueType)}.Instance.GetSize(kvp.Value))";
-
-            propertyInfo.SerializeCode =
-                $"Int32Serializer.Instance.Serialize({instancePropRef}.Count, buffer, ref offset);\n" +
-                $"            foreach (var kvp in {instancePropRef})\n" +
-                $"            {{\n" +
-                $"                {GetSerializerForType(keyType)}.Instance.Serialize(kvp.Key, buffer, ref offset);\n" +
-                $"                {GetSerializerForType(valueType)}.Instance.Serialize(kvp.Value, buffer, ref offset);\n" +
-                $"            }}";
-
-            propertyInfo.DeserializeCode =
-                $"Int32Serializer.Instance.Deserialize(out int {localVarName}Count, buffer, ref offset);\n" +
-                $"            {instancePropRef}.Clear();\n" +
-                $"            for (int i = 0; i < {localVarName}Count; i++)\n" +
-                $"            {{\n" +
-                $"                {GetSerializerForType(keyType)}.Instance.Deserialize(out {GetFullTypeName(keyType)} key, buffer, ref offset);\n" +
-                $"                {GetSerializerForType(valueType)}.Instance.Deserialize(out {GetFullTypeName(valueType)} dictValue, buffer, ref offset);\n" +
-                $"                {instancePropRef}[key] = dictValue;\n" +
-                $"            }}";
+            SetCollectionPropertyCodeAndSize(propertyInfo, property, CollectionType.Dictionary);
         }
 
         public void SetArrayPropertyCodeAndSize(TemplatePropertyInfo propertyInfo, System.Reflection.PropertyInfo property)
         {
-            Type propertyType = property.PropertyType;
-            Type unwrappedType = Nullable.GetUnderlyingType(propertyType) ?? propertyType;
-            var elementType = unwrappedType.GetElementType();
-
-            string propName = property.Name;
-            string instancePropRef = $"{char.ToLowerInvariant(property.DeclaringType.Name[0])}{property.DeclaringType.Name.Substring(1)}.{propName}";
-            string localVarName = "_local_" + char.ToLowerInvariant(propName[0]) + propName.Substring(1);
-
-            propertyInfo.SizeCalculation =
-                $"Int32Serializer.Instance.GetSize({instancePropRef}.Length) + " +
-                $"{instancePropRef}.Sum(arrayItem => {GetSerializerForType(elementType)}.Instance.GetSize(arrayItem))";
-
-            propertyInfo.SerializeCode =
-                $"Int32Serializer.Instance.Serialize({instancePropRef}.Length, buffer, ref offset);\n" +
-                $"            foreach (var arrayItem in {instancePropRef})\n" +
-                $"            {{\n" +
-                $"                {GetSerializerForType(elementType)}.Instance.Serialize(arrayItem, buffer, ref offset);\n" +
-                $"            }}";
-
-            propertyInfo.DeserializeCode =
-                $"Int32Serializer.Instance.Deserialize(out int {localVarName}Length, buffer, ref offset);\n" +
-                $"            {instancePropRef} = new {GetFullTypeName(elementType)}[{localVarName}Length];\n" +
-                $"            for (int i = 0; i < {localVarName}Length; i++)\n" +
-                $"            {{\n" +
-                $"                {GetSerializerForType(elementType)}.Instance.Deserialize(out {GetFullTypeName(elementType)} arrayItem, buffer, ref offset);\n" +
-                $"                {instancePropRef}[i] = arrayItem;\n" +
-                $"            }}";
+            SetCollectionPropertyCodeAndSize(propertyInfo, property, CollectionType.Array);
         }
 
-        public string GetSerializerForType(Type type)
+        public string GetSerializerForType(Type type) => type switch
         {
-            if (type.IsPrimitive || type == typeof(string))
-            {
-                return $"{type.Name}Serializer";
-            }
-            if (type.IsEnum)
-            {
-                return "EnumSerializer";
-            }
-            if (IsList(type))
-            {
-                return "ListSerializer";
-            }
-            if (IsDictionary(type))
-            {
-                return "DictionarySerializer";
-            }
-            if (type.IsArray)
-            {
-                return "ArraySerializer";
-            }
-            return $"{type.Name}Serializer";
-        }
+            { IsPrimitive: true } or { FullName: "System.String" } => $"{type.Name}Serializer",
+            { IsEnum: true } => "EnumSerializer",
+            var t when IsList(t) => "ListSerializer",
+            var t when IsDictionary(t) => "DictionarySerializer",
+            { IsArray: true } => "ArraySerializer",
+            _ => $"{type.Name}Serializer"
+        };
 
         public Type GetDictionaryKeyType(Type type)
         {
@@ -800,36 +761,16 @@ namespace YoloSerializer.Generator
             return genericArgs.Length >= 2 ? genericArgs[1] : null;
         }
 
-        public string GetFullTypeName(Type type)
+        public string GetFullTypeName(Type type) => type switch
         {
-            if (type == null) return "object";
-
-            if (type.IsPrimitive || type == typeof(string))
-            {
-                return type.Name;
-            }
-            if (type.IsEnum)
-            {
-                return type.Name;
-            }
-            if (IsList(type))
-            {
-                var elementType = GetElementType(type);
-                return $"List<{GetFullTypeName(elementType)}>";
-            }
-            if (IsDictionary(type))
-            {
-                var keyType = GetDictionaryKeyType(type);
-                var valueType = GetDictionaryValueType(type);
-                return $"Dictionary<{GetFullTypeName(keyType)}, {GetFullTypeName(valueType)}>";
-            }
-            if (type.IsArray)
-            {
-                var elementType = type.GetElementType();
-                return $"{GetFullTypeName(elementType)}[]";
-            }
-            return type.Name;
-        }
+            null => "object",
+            { IsPrimitive: true } or { FullName: "System.String" } => type.Name,
+            { IsEnum: true } => type.Name,
+            var t when IsList(t) => $"List<{GetFullTypeName(GetElementType(t))}>",
+            var t when IsDictionary(t) => $"Dictionary<{GetFullTypeName(GetDictionaryKeyType(t))}, {GetFullTypeName(GetDictionaryValueType(t))}>",
+            { IsArray: true } => $"{GetFullTypeName(type.GetElementType())}[]",
+            _ => type.Name
+        };
 
         public bool IsReferenceType(Type type)
         {

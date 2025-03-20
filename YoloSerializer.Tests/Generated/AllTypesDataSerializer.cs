@@ -123,7 +123,7 @@ namespace YoloSerializer.Core.Serializers
                         allTypesData.DoubleValue = _local_doubleValue;
                         BooleanSerializer.Instance.Deserialize(out bool _local_boolValue, buffer, ref offset);
                         allTypesData.BoolValue = _local_boolValue;
-                        StringSerializer.Instance.Deserialize(out string? _local_stringValue, buffer, ref offset);
+                        StringSerializer.Instance.Deserialize(out string _local_stringValue, buffer, ref offset);
                         allTypesData.StringValue = _local_stringValue;
                         ByteSerializer.Instance.Deserialize(out byte _local_byteValue, buffer, ref offset);
                         allTypesData.ByteValue = _local_byteValue;
