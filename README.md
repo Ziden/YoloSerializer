@@ -21,11 +21,16 @@ A high-performance, zero-copy binary serialization library for .NET with IL2CPP 
 | Format | Binary | Binary | Binary | Text | Binary |
 | Performance | Excellent | Very Good | Good | Moderate | Poor |
 | Memory Usage | Minimal | Low | Low | High | High |
-| IL2CPP Compatible | ✅ | ⚠️ | ⚠️ | ⚠️ | ❌ |
+| IL2CPP Compatible | ✅ | ✅* | ✅* | ✅* | ❌ |
 | Reflection-Free | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Code Generation | ✅ | ⚠️ | ✅ | ❌ | ❌ |
+| Code Generation | ✅ | ✅ | ✅ | ❌ | ❌ |
 | Cross-Platform | ✅ | ✅ | ✅ | ✅ | ⚠️ |
 | Zero-Copy | ✅ | ⚠️ | ❌ | ❌ | ❌ |
+
+***Note**: MessagePack, Protobuf, and JSON.NET can work with IL2CPP but require additional setup:
+- MessagePack: Requires pre-code generation to avoid runtime reflection
+- Protobuf: Basic serialization works but some reflection features like descriptors may fail
+- JSON.NET: Requires a special Unity-compatible version and may need link.xml adjustments
 
 ## Installation
 

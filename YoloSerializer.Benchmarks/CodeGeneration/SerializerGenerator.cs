@@ -44,7 +44,7 @@ namespace YoloSerializer.Benchmarks.CodeGeneration
 
             // Generate the code
             var generator = new CodeGenerator();
-            generator.GenerateSerializers(types, template, config).GetAwaiter().GetResult();
+            generator.GenerateSerializers(types, config).GetAwaiter().GetResult();
         }
 
         private static string GetSourceCodeDirectory()

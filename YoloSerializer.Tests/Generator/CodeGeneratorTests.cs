@@ -47,7 +47,7 @@ namespace YoloSerializer.Tests.Generator
             var config = new GeneratorConfig { OutputPath = _testOutputPath, ForceRegeneration = true };
 
             // Act
-            await _generator.GenerateSerializers(types.ToList(), _template, config);
+            await _generator.GenerateSerializers(types.ToList(), config);
 
             // Assert
             Assert.True(Directory.Exists(Path.Combine(_testOutputPath, "Serializers")));
@@ -63,7 +63,7 @@ namespace YoloSerializer.Tests.Generator
             var config = new GeneratorConfig { OutputPath = _testOutputPath, ForceRegeneration = true };
 
             // Act
-            await _generator.GenerateSerializers(types.ToList(), _template, config);
+            await _generator.GenerateSerializers(types.ToList(), config);
 
             // Assert
             var serializersPath = Path.Combine(_testOutputPath, "Serializers");
@@ -79,7 +79,7 @@ namespace YoloSerializer.Tests.Generator
             var config = new GeneratorConfig { OutputPath = _testOutputPath, ForceRegeneration = true };
 
             // Act
-            await _generator.GenerateSerializers(types.ToList(), _template, config);
+            await _generator.GenerateSerializers(types.ToList(), config);
 
             // Assert
             var mapsPath = Path.Combine(_testOutputPath, "Maps");
@@ -99,7 +99,7 @@ namespace YoloSerializer.Tests.Generator
             var config = new GeneratorConfig { OutputPath = _testOutputPath, ForceRegeneration = true };
 
             // Act
-            await _generator.GenerateSerializers(types.ToList(), _template, config);
+            await _generator.GenerateSerializers(types.ToList(), config);
 
             // Assert
             var corePath = Path.Combine(_testOutputPath, "Core");
@@ -115,8 +115,8 @@ namespace YoloSerializer.Tests.Generator
             var config = new GeneratorConfig { OutputPath = _testOutputPath, ForceRegeneration = false };
 
             // Act
-            await _generator.GenerateSerializers(types.ToList(), _template, config);
-            await _generator.GenerateSerializers(types.ToList(), _template, config);
+            await _generator.GenerateSerializers(types.ToList(), config);
+            await _generator.GenerateSerializers(types.ToList(), config);
 
             // Assert
             var serializersPath = Path.Combine(_testOutputPath, "Serializers");
@@ -129,7 +129,7 @@ namespace YoloSerializer.Tests.Generator
 
             // Generate again with force flag
             config.ForceRegeneration = true;
-            await _generator.GenerateSerializers(types.ToList(), _template, config);
+            await _generator.GenerateSerializers(types.ToList(), config);
 
             // Verify file was updated
             fileInfo.Refresh();
@@ -144,7 +144,7 @@ namespace YoloSerializer.Tests.Generator
             var config = new GeneratorConfig { OutputPath = _testOutputPath, ForceRegeneration = true };
 
             // Act
-            await _generator.GenerateSerializers(types.ToList(), _template, config);
+            await _generator.GenerateSerializers(types.ToList(), config);
 
             // Assert
             var serializersPath = Path.Combine(_testOutputPath, "Serializers");
@@ -167,7 +167,7 @@ namespace YoloSerializer.Tests.Generator
             var config = new GeneratorConfig { OutputPath = _testOutputPath, ForceRegeneration = true };
 
             // Act
-            await _generator.GenerateSerializers(types.ToList(), _template, config);
+            await _generator.GenerateSerializers(types.ToList(), config);
 
             // Assert
             var corePath = Path.Combine(_testOutputPath, "Core");
@@ -186,7 +186,7 @@ namespace YoloSerializer.Tests.Generator
             var config = new GeneratorConfig { OutputPath = _testOutputPath, ForceRegeneration = true };
 
             // Act
-            await _generator.GenerateSerializers(types.ToList(), _template, config);
+            await _generator.GenerateSerializers(types.ToList(), config);
 
             // Assert
             var mapsPath = Path.Combine(_testOutputPath, "Maps");
@@ -204,7 +204,7 @@ namespace YoloSerializer.Tests.Generator
             var config = new GeneratorConfig { OutputPath = _testOutputPath, ForceRegeneration = true };
 
             // Act
-            await _generator.GenerateSerializers(types.ToList(), _template, config);
+            await _generator.GenerateSerializers(types.ToList(), config);
 
             // Assert
             var mapsPath = Path.Combine(_testOutputPath, "Maps");
