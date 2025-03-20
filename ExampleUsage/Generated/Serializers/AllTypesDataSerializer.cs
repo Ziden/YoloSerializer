@@ -33,7 +33,7 @@ namespace YoloSerializer.Core.Serializers
 
 
         // Object pooling to avoid allocations during deserialization
-        private static readonly ObjectPool<AllTypesData> _Pool = 
+        private static readonly ObjectPool<AllTypesData> _allTypesDataPool = 
             new ObjectPool<AllTypesData>(() => new AllTypesData());
 
             
@@ -112,7 +112,7 @@ namespace YoloSerializer.Core.Serializers
         {
 
             // Get a AllTypesData instance from pool
-            var allTypesData = _Pool.Get();
+            var allTypesData = _allTypesDataPool.Get();
 
 
             Int32Serializer.Instance.Deserialize(out int _local_int32Value, buffer, ref offset);

@@ -33,7 +33,7 @@ namespace YoloSerializer.Core.Serializers
 
 
         // Object pooling to avoid allocations during deserialization
-        private static readonly ObjectPool<Position> _Pool = 
+        private static readonly ObjectPool<Position> _positionPool = 
             new ObjectPool<Position>(() => new Position());
 
             
@@ -82,7 +82,7 @@ namespace YoloSerializer.Core.Serializers
         {
 
             // Get a Position instance from pool
-            var position = _Pool.Get();
+            var position = _positionPool.Get();
 
 
             FloatSerializer.Instance.Deserialize(out float _local_x, buffer, ref offset);

@@ -37,7 +37,7 @@ namespace YoloSerializer.Core.Serializers
 
 
         // Object pooling to avoid allocations during deserialization
-        private static readonly ObjectPool<PlayerData> _Pool = 
+        private static readonly ObjectPool<PlayerData> _playerDataPool = 
             new ObjectPool<PlayerData>(() => new PlayerData());
 
             
@@ -103,7 +103,7 @@ namespace YoloSerializer.Core.Serializers
         {
 
             // Get a PlayerData instance from pool
-            var playerData = _Pool.Get();
+            var playerData = _playerDataPool.Get();
 
 
             Int32Serializer.Instance.Deserialize(out int _local_playerId, buffer, ref offset);

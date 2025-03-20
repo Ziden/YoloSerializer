@@ -191,9 +191,175 @@ namespace YoloSerializer.Generator
 
         internal List<TemplatePropertyInfo> GetTypeProperties(Type type)
         {
-            return type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Select(p => BuildPropertyInfo(p))
                 .ToList();
+            
+            // Get public fields as well
+            var fields = type.GetFields(BindingFlags.Public | BindingFlags.Instance)
+                .Select(f => BuildFieldInfo(f))
+                .ToList();
+            
+            // Combine properties and fields
+            properties.AddRange(fields);
+            
+            return properties;
+        }
+
+        internal TemplatePropertyInfo BuildFieldInfo(System.Reflection.FieldInfo field)
+        {
+            var fieldType = field.FieldType;
+            var unwrappedType = Nullable.GetUnderlyingType(fieldType) ?? fieldType;
+            
+            var fieldInfo = new TemplatePropertyInfo
+            {
+                Name = field.Name,
+                Type = TypeHelper.GetFullTypeName(fieldType),
+                PropertyType = fieldType,
+                IsList = TypeHelper.IsList(unwrappedType),
+                IsDictionary = TypeHelper.IsDictionary(unwrappedType),
+                IsArray = unwrappedType.IsArray,
+                IsNullable = TypeHelper.IsNullable(fieldType),
+                IsYoloSerializable = IsExplicitSerializableType(unwrappedType)
+            };
+
+            if (fieldInfo.IsList)
+            {
+                fieldInfo.ElementType = TypeHelper.GetElementType(unwrappedType)?.Name;
+                SetCollectionFieldCodeAndSize(fieldInfo, field, CollectionType.List);
+            }
+            else if (fieldInfo.IsDictionary)
+            {
+                fieldInfo.KeyType = TypeHelper.GetDictionaryKeyType(unwrappedType)?.Name;
+                fieldInfo.ValueType = TypeHelper.GetDictionaryValueType(unwrappedType)?.Name;
+                SetCollectionFieldCodeAndSize(fieldInfo, field, CollectionType.Dictionary);
+            }
+            else if (fieldInfo.IsArray)
+            {
+                fieldInfo.ElementType = unwrappedType.GetElementType()?.Name;
+                SetCollectionFieldCodeAndSize(fieldInfo, field, CollectionType.Array);
+            }
+            else
+            {
+                SetStandardFieldCodeAndSize(fieldInfo, field);
+            }
+
+            return fieldInfo;
+        }
+
+        internal void SetStandardFieldCodeAndSize(TemplatePropertyInfo fieldInfo, System.Reflection.FieldInfo field)
+        {
+            var fieldType = field.FieldType;
+            var unwrappedType = Nullable.GetUnderlyingType(fieldType) ?? fieldType;
+            var isNullable = fieldType != unwrappedType || !fieldType.IsValueType;
+            var nullableMarker = isNullable ? "?" : "";
+            var fieldName = field.Name;
+            var instanceFieldRef = $"{TypeHelper.GetInstanceVarName(field.DeclaringType.Name)}.{fieldName}";
+            var localVarName = "_local_" + TypeHelper.GetInstanceVarName(fieldName);
+
+            if (PrimitiveTypeMap.TryGetValue(unwrappedType, out var typeInfo))
+            {
+                fieldInfo.SizeCalculation = $"{typeInfo.Serializer}.Instance.GetSize({instanceFieldRef})";
+                fieldInfo.SerializeCode = $"{typeInfo.Serializer}.Instance.Serialize({instanceFieldRef}, buffer, ref offset);";
+                fieldInfo.DeserializeCode = $"{typeInfo.Serializer}.Instance.Deserialize(out {typeInfo.TypeName} {localVarName}, buffer, ref offset);\n" +
+                                           $"            {instanceFieldRef} = {localVarName};";
+            }
+            else if (unwrappedType.IsEnum)
+            {
+                var fullTypeName = TypeHelper.GetFullTypeName(unwrappedType);
+                var fullTypeWithNamespace = unwrappedType.Namespace != field.DeclaringType.Namespace ? 
+                    $"{unwrappedType.Namespace}.{fullTypeName}" : fullTypeName;
+                    
+                fieldInfo.SizeCalculation = $"EnumSerializer<{fullTypeWithNamespace}>.Instance.GetSize({instanceFieldRef})";
+                fieldInfo.SerializeCode = $"EnumSerializer<{fullTypeWithNamespace}>.Instance.Serialize({instanceFieldRef}, buffer, ref offset);";
+                fieldInfo.DeserializeCode = $"EnumSerializer<{fullTypeWithNamespace}>.Instance.Deserialize(out {fullTypeWithNamespace} {localVarName}, buffer, ref offset);\n" +
+                               $"            {instanceFieldRef} = {localVarName};";
+            }
+            else if (fieldInfo.IsYoloSerializable)
+            {
+                var serializerName = $"{unwrappedType.Name}Serializer";
+                var fullTypeName = TypeHelper.GetFullTypeName(unwrappedType);
+                var fullTypeWithNamespace = unwrappedType.Namespace != field.DeclaringType.Namespace ? 
+                    $"{unwrappedType.Namespace}.{fullTypeName}" : fullTypeName;
+                    
+                fieldInfo.SizeCalculation = $"{serializerName}.Instance.GetSize({instanceFieldRef})";
+                fieldInfo.SerializeCode = $"{serializerName}.Instance.Serialize({instanceFieldRef}, buffer, ref offset);";
+                fieldInfo.DeserializeCode = $"{serializerName}.Instance.Deserialize(out {fullTypeWithNamespace}{nullableMarker} {localVarName}, buffer, ref offset);\n" +
+                               $"            {instanceFieldRef} = {localVarName};";
+            }
+            else
+            {
+                throw new NotSupportedException($"No serializer available for type {unwrappedType.FullName}");
+            }
+        }
+
+        private void SetCollectionFieldCodeAndSize(TemplatePropertyInfo fieldInfo, FieldInfo field, CollectionType type)
+        {
+            var elementType = type switch
+            {
+                CollectionType.List => TypeHelper.GetElementType(field.FieldType),
+                CollectionType.Dictionary => TypeHelper.GetDictionaryValueType(field.FieldType),
+                CollectionType.Array => field.FieldType.GetElementType(),
+                _ => throw new ArgumentException("Invalid collection type")
+            };
+
+            var keyType = type == CollectionType.Dictionary ? TypeHelper.GetDictionaryKeyType(field.FieldType) : null;
+            
+            var fieldName = field.Name;
+            var instanceFieldRef = $"{TypeHelper.GetInstanceVarName(field.DeclaringType.Name)}.{fieldName}";
+            var localVarName = "_local_" + TypeHelper.GetInstanceVarName(fieldName);
+
+            // Get declaring type to check if we need to use fully qualified names
+            Type declaringType = field.DeclaringType;
+
+            // Use fully qualified names if the types are in different namespaces
+            string elementTypeName = TypeHelper.GetFullTypeName(elementType);
+            string fullElementTypeName = elementTypeName;
+            if (declaringType != null && elementType != null && elementType.Namespace != declaringType.Namespace)
+            {
+                fullElementTypeName = $"{elementType.Namespace}.{elementTypeName}";
+            }
+            
+            string keyTypeName = keyType != null ? TypeHelper.GetFullTypeName(keyType) : null;
+            string fullKeyTypeName = keyTypeName;
+            if (declaringType != null && keyType != null && keyType.Namespace != declaringType.Namespace)
+            {
+                fullKeyTypeName = $"{keyType.Namespace}.{keyTypeName}";
+            }
+            
+            // Generate size calculation
+            fieldInfo.SizeCalculation = GenerateCollectionSizeCalculation(instanceFieldRef, elementType, keyType, type);
+
+            // Generate serialization code
+            fieldInfo.SerializeCode = GenerateCollectionSerializationCode(instanceFieldRef, elementType, keyType, type);
+
+            // Generate deserialization code
+            fieldInfo.DeserializeCode = type switch
+            {
+                CollectionType.List => $"Int32Serializer.Instance.Deserialize(out int {localVarName}Count, buffer, ref offset);\n" +
+                                     $"            {instanceFieldRef}.Clear();\n" +
+                                     $"            for (int i = 0; i < {localVarName}Count; i++)\n" +
+                                     $"            {{\n" +
+                                     $"                {TypeHelper.GetSerializerForType(elementType)}.Instance.Deserialize(out {fullElementTypeName} listItem, buffer, ref offset);\n" +
+                                     $"                {instanceFieldRef}.Add(listItem);\n" +
+                                     $"            }}",
+                CollectionType.Dictionary => $"Int32Serializer.Instance.Deserialize(out int {localVarName}Count, buffer, ref offset);\n" +
+                                   $"            {instanceFieldRef}.Clear();\n" +
+                                   $"            for (int i = 0; i < {localVarName}Count; i++)\n" +
+                                   $"            {{\n" +
+                                   $"                {TypeHelper.GetSerializerForType(keyType)}.Instance.Deserialize(out {fullKeyTypeName} key, buffer, ref offset);\n" +
+                                   $"                {TypeHelper.GetSerializerForType(elementType)}.Instance.Deserialize(out {fullElementTypeName} dictValue, buffer, ref offset);\n" +
+                                   $"                {instanceFieldRef}[key] = dictValue;\n" +
+                                   $"            }}",
+                CollectionType.Array => $"Int32Serializer.Instance.Deserialize(out int {localVarName}Length, buffer, ref offset);\n" +
+                              $"            {instanceFieldRef} = new {fullElementTypeName}[{localVarName}Length];\n" +
+                              $"            for (int i = 0; i < {localVarName}Length; i++)\n" +
+                              $"            {{\n" +
+                              $"                {TypeHelper.GetSerializerForType(elementType)}.Instance.Deserialize(out {fullElementTypeName} arrayItem, buffer, ref offset);\n" +
+                              $"                {instanceFieldRef}[i] = arrayItem;\n" +
+                              $"            }}",
+                _ => throw new ArgumentException("Invalid collection type")
+            };
         }
 
         internal SerializerTemplateModel CreateTemplateContext(
@@ -316,7 +482,10 @@ namespace YoloSerializer.Generator
             var namespaces = _serializableTypes.Select(t => t.Namespace).Distinct();
             foreach (var ns in namespaces)
             {
-                sb.AppendLine($"using {ns};");
+                if (!string.IsNullOrEmpty(ns))
+                {
+                    sb.AppendLine($"using {ns};");
+                }
             }
             
             sb.AppendLine();
@@ -471,7 +640,10 @@ namespace YoloSerializer.Generator
             var namespaces = _serializableTypes.Select(t => t.Namespace).Distinct();
             foreach (var ns in namespaces)
             {
-                sb.AppendLine($"using {ns};");
+                if (!string.IsNullOrEmpty(ns))
+                {
+                    sb.AppendLine($"using {ns};");
+                }
             }
             
             sb.AppendLine("namespace YoloSerializer.Core.Serializers");
@@ -898,7 +1070,10 @@ namespace YoloSerializer.Generator
             var namespaces = serializableTypes.Select(t => t.Namespace).Distinct();
             foreach (var ns in namespaces)
             {
-                sb.AppendLine($"using {ns};");
+                if (!string.IsNullOrEmpty(ns))
+                {
+                    sb.AppendLine($"using {ns};");
+                }
             }
 
             sb.AppendLine();

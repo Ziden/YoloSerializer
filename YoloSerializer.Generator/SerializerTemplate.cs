@@ -37,7 +37,7 @@ namespace YoloSerializer.Core.Serializers
 
 {{ if is_class }}
         // Object pooling to avoid allocations during deserialization
-        private static readonly ObjectPool<{{ class_name }}> _{{ class_variable_name }}Pool = 
+        private static readonly ObjectPool<{{ class_name }}> _{{ instance_var_name }}Pool = 
             new ObjectPool<{{ class_name }}>(() => new {{ class_name }}());
 {{ end }}
             
@@ -82,7 +82,7 @@ namespace YoloSerializer.Core.Serializers
         {
 {{ if is_class }}
             // Get a {{ class_name }} instance from pool
-            var {{ instance_var_name }} = _{{ class_variable_name }}Pool.Get();
+            var {{ instance_var_name }} = _{{ instance_var_name }}Pool.Get();
 {{ else }}
             var {{ instance_var_name }} = new {{ class_name }}();
 {{ end }}
