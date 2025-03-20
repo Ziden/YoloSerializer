@@ -39,6 +39,26 @@ namespace YoloSerializer.Core.Serializers
             _serializer.SerializeWithoutSizeCheck(obj, buffer, ref offset);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Serialize(Node? obj, Span<byte> buffer, ref int offset)
+        {
+            _serializer.Serialize(obj, buffer, ref offset);
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SerializeWithoutSizeCheck(Node? obj, Span<byte> buffer, ref int offset)
+        {
+            _serializer.SerializeWithoutSizeCheck(obj, buffer, ref offset);
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Serialize(Inventory? obj, Span<byte> buffer, ref int offset)
+        {
+            _serializer.Serialize(obj, buffer, ref offset);
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SerializeWithoutSizeCheck(Inventory? obj, Span<byte> buffer, ref int offset)
+        {
+            _serializer.SerializeWithoutSizeCheck(obj, buffer, ref offset);
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Serialize(Position? obj, Span<byte> buffer, ref int offset)
         {
             _serializer.Serialize(obj, buffer, ref offset);
@@ -74,6 +94,16 @@ namespace YoloSerializer.Core.Serializers
             return _serializer.Deserialize<PlayerData>(buffer, ref offset);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Node? DeserializeNode(ReadOnlySpan<byte> buffer, ref int offset)
+        {
+            return _serializer.Deserialize<Node>(buffer, ref offset);
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Inventory? DeserializeInventory(ReadOnlySpan<byte> buffer, ref int offset)
+        {
+            return _serializer.Deserialize<Inventory>(buffer, ref offset);
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Position? DeserializePosition(ReadOnlySpan<byte> buffer, ref int offset)
         {
             return _serializer.Deserialize<Position>(buffer, ref offset);
@@ -90,6 +120,16 @@ namespace YoloSerializer.Core.Serializers
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int GetSerializedSize(PlayerData? obj)
+        {
+            return _serializer.GetSerializedSize(obj);
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public int GetSerializedSize(Node? obj)
+        {
+            return _serializer.GetSerializedSize(obj);
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public int GetSerializedSize(Inventory? obj)
         {
             return _serializer.GetSerializedSize(obj);
         }

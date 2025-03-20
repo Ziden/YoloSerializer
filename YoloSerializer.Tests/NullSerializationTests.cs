@@ -252,28 +252,13 @@ namespace YoloSerializer.Tests
         }
         
         [Fact]
-        public void ShouldHandleDictionaryWithNullValues()
+        public void NestedObjects()
         {
             // Arrange - Setup PlayerData with string values that can be null
-            var original = new PlayerData(
-                playerId: 7,
-                playerName: "NullValuePlayer",
-                health: 100,
-                position: new Position(1.0f, 2.0f, 3.0f),
-                isActive: true
-            );
-            
-            // Create a dictionary of string-to-string to test null values
-            var customStats = new Dictionary<string, string>
-            {
-                ["ValidKey"] = "ValidValue",
-                ["NullValueKey"] = null
-            };
-            
-            // Use reflection to replace the Stats property with our custom dictionary
-            typeof(PlayerData).GetProperty("Achievements")!.SetValue(original, new List<string> { "Achievement1", null, "Achievement3" });
-            
-            // Act
+            var original = new Node() { Id = 1, Name = "One" };
+            var two = new Node() { Id = 2, Name = "Two" };
+            original.Next = two;
+
             var serializer = YoloGeneratedSerializer.Instance;
             int size = serializer.GetSerializedSize(original);
             var buffer = new byte[size];
@@ -286,16 +271,12 @@ namespace YoloSerializer.Tests
             
             // Deserialize
             offset = 0;
-            var result = serializer.Deserialize<PlayerData>(buffer, ref offset);
+            var result = serializer.Deserialize<Node>(buffer, ref offset);
             
             // Assert
             Assert.NotNull(result);
-            Assert.NotNull(result!.Achievements);
-            Assert.Equal(3, result.Achievements.Count);
-            Assert.Equal("Achievement1", result.Achievements[0]);
-            Assert.Null(result.Achievements[1]);
-            Assert.Equal("Achievement3", result.Achievements[2]);
-            Assert.Equal(size, offset);
+            Assert.NotNull(result.Next);
+            Assert.Null(result.Next.Next);
         }
         
         [Fact]

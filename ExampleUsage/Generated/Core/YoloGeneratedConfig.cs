@@ -10,6 +10,8 @@ namespace YoloSerializer.Generated.Core
         public static readonly HashSet<Type> SerializableTypes = new()
         {
             typeof(PlayerData),
+            typeof(Node),
+            typeof(Inventory),
             typeof(Position),
             typeof(AllTypesData),
         };

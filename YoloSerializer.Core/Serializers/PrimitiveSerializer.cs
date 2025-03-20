@@ -641,4 +641,45 @@ namespace YoloSerializer.Core.Serializers
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int GetSize(TEnum value) => sizeof(int); // Most enums are backed by int
     }
+
+    /// <summary>
+    /// Non-generic serializer for enum values to be used in collections
+    /// </summary>
+    public sealed class EnumSerializer
+    {
+        private static readonly EnumSerializer _instance = new EnumSerializer();
+        
+        /// <summary>
+        /// Singleton instance for performance
+        /// </summary>
+        public static EnumSerializer Instance => _instance;
+        
+        private EnumSerializer() { }
+        
+        /// <summary>
+        /// Serializes an enum to a byte span
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Serialize(Enum value, Span<byte> span, ref int offset)
+        {
+            // Write the enum value as an integer
+            Int32Serializer.Instance.Serialize(Convert.ToInt32(value), span, ref offset);
+        }
+        
+        /// <summary>
+        /// Deserializes an enum from a byte span
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public object Deserialize(Type enumType, ReadOnlySpan<byte> span, ref int offset)
+        {
+            Int32Serializer.Instance.Deserialize(out int intValue, span, ref offset);
+            return Enum.ToObject(enumType, intValue);
+        }
+        
+        /// <summary>
+        /// Gets the size in bytes needed to serialize an enum
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public int GetSize(Enum value) => sizeof(int); // Most enums are backed by int
+    }
 } 

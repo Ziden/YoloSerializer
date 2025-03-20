@@ -43,7 +43,7 @@ namespace YoloSerializer.Generator
             public static string GetSerializerForType(Type type) => type switch
             {
                 { IsPrimitive: true } or { FullName: "System.String" } => $"{type.Name}Serializer",
-                { IsEnum: true } => "EnumSerializer",
+                { IsEnum: true } => $"EnumSerializer<{type.Name}>",
                 var t when IsList(t) => "ListSerializer",
                 var t when IsDictionary(t) => "DictionarySerializer",
                 { IsArray: true } => "ArraySerializer",
@@ -1078,7 +1078,7 @@ namespace YoloSerializer.Generator
         public string GetSerializerForType(Type type) => type switch
         {
             { IsPrimitive: true } or { FullName: "System.String" } => $"{type.Name}Serializer",
-            { IsEnum: true } => "EnumSerializer",
+            { IsEnum: true } => "EnumSerializer<TEnum>",
             var t when IsList(t) => "ListSerializer",
             var t when IsDictionary(t) => "DictionarySerializer",
             { IsArray: true } => "ArraySerializer",
