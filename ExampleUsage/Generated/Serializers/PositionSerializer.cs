@@ -52,8 +52,9 @@ namespace YoloSerializer.Core.Serializers
 
             
             int size = 0;
-            size += 12; // Pre-calculated fixed size for primitive types
-
+            size += SingleSerializer.Instance.GetSize(position.X);
+                        size += SingleSerializer.Instance.GetSize(position.Y);
+                        size += SingleSerializer.Instance.GetSize(position.Z);
 
             return size;
         }
