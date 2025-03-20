@@ -16,6 +16,16 @@ using YoloSerializer.Core.Serializers;
 namespace YoloSerializer.Generator
 {
     /// <summary>
+    /// Configuration for the serializer generator
+    /// </summary>
+    class GeneratorConfig
+    {
+        public Assembly TargetAssembly { get; set; }
+        public string OutputPath { get; set; }
+        public bool ForceRegeneration { get; set; }
+    }
+
+    /// <summary>
     /// Represents property information used in template rendering
     /// </summary>
     class PropertyInfo
@@ -47,62 +57,71 @@ namespace YoloSerializer.Generator
 
         static async Task Main(string[] args)
         {
-            // Default parameters
-            var targetAssembly = typeof(PlayerData).Assembly; // initial example
-
-            // Make sure AllTypesData is included
-            var allTypesDataType = typeof(AllTypesData);
+            var config = ParseCommandLineArgs(args);
             
-            // Use a relative path that works regardless of where the executable is located
-            var solutionDir = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", ".."));
-            var outputPath = Path.GetFullPath(Path.Combine(solutionDir, "YoloSerializer.Tests", "Generated"));
+            Directory.CreateDirectory(config.OutputPath);
             
-            // Flag to force regeneration of serializers even if they exist
-            bool forceRegeneration = args.Contains("--force") || args.Contains("-f");
+            Console.WriteLine($"Generating serializers for types in {config.TargetAssembly.FullName}");
+            Console.WriteLine($"Output path: {config.OutputPath}");
+            Console.WriteLine($"Force regeneration: {config.ForceRegeneration}");
+            
+            // Parse the serializer template
+            string templateContent = SerializerTemplate.GetSerializerTemplate();
+            var template = Template.Parse(templateContent);
+            
+            // Get list of serializable types
+            var serializableTypes = ExplicitSerializableTypes.ToList();
+            Console.WriteLine($"Found {serializableTypes.Count} serializable types");
+            
+            // Generate all required files
+            await GenerateSerializers(serializableTypes, template, config);
+            
+            Console.WriteLine("Done!");
+        }
 
-            // test 
-            forceRegeneration = true;
-
-            // Parse command line arguments if provided
+        private static GeneratorConfig ParseCommandLineArgs(string[] args)
+        {
+            // Default configuration
+            var config = new GeneratorConfig
+            {
+                TargetAssembly = typeof(PlayerData).Assembly,
+                OutputPath = GetDefaultOutputPath(),
+                ForceRegeneration = args.Contains("--force") || args.Contains("-f")
+            };
+            
+            // Parse positional arguments
             var filteredArgs = args.Where(a => !a.StartsWith("-")).ToArray();
             if (filteredArgs.Length >= 1)
             {
                 string assemblyPath = filteredArgs[0];
-                targetAssembly = Assembly.LoadFrom(assemblyPath);
+                config.TargetAssembly = Assembly.LoadFrom(assemblyPath);
             }
             
             if (filteredArgs.Length >= 2)
             {
-                outputPath = Path.GetFullPath(filteredArgs[1]);
+                config.OutputPath = Path.GetFullPath(filteredArgs[1]);
             }
             
-            // Ensure output directory exists
-            Directory.CreateDirectory(outputPath);
-            
-            Console.WriteLine($"Generating serializers for types in {targetAssembly.FullName}");
-            Console.WriteLine($"Output path: {outputPath}");
-            Console.WriteLine($"Force regeneration: {forceRegeneration}");
-            
-            // Use embedded template instead of loading from file
-            string templateContent = SerializerTemplate.GetSerializerTemplate();
-            var template = Template.Parse(templateContent);
-            
-            // Use explicit list of serializable types instead of searching for types with a marker interface
-            var serializableTypes = ExplicitSerializableTypes.ToList();
-                
-            Console.WriteLine($"Found {serializableTypes.Count} serializable types");
-            
-            // Generate a serializer for each type
+            return config;
+        }
+        
+        private static string GetDefaultOutputPath()
+        {
+            var solutionDir = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", ".."));
+            return Path.GetFullPath(Path.Combine(solutionDir, "YoloSerializer.Tests", "Generated"));
+        }
+        
+        private static async Task GenerateSerializers(List<Type> serializableTypes, Template template, GeneratorConfig config)
+        {
+            // Generate individual serializers for each type
             foreach (var type in serializableTypes)
             {
-                await GenerateSerializer(type, template, outputPath, forceRegeneration);
+                await GenerateSerializer(type, template, config.OutputPath, config.ForceRegeneration);
             }
             
-            // Generate YoloGeneratedMap and YoloGeneratedSerializer
-            await GenerateTypeMap(serializableTypes, outputPath, forceRegeneration);
-            await GenerateYoloSerializer(outputPath, forceRegeneration);
-            
-            Console.WriteLine("Done!");
+            // Generate support files
+            await GenerateTypeMap(serializableTypes, config.OutputPath, config.ForceRegeneration);
+            await GenerateYoloSerializer(config.OutputPath, config.ForceRegeneration);
         }
         
         private static async Task GenerateSerializer(Type type, Template template, string outputPath, bool forceRegeneration)
@@ -119,20 +138,37 @@ namespace YoloSerializer.Generator
             Console.WriteLine($"Generating serializer for {type.Name}");
             
             // Gather all public properties of the type
-            var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            var properties = GetTypeProperties(type);
+            
+            // Create template context and render
+            var templateContext = CreateTemplateContext(type, properties);
+            var result = await template.RenderAsync(templateContext);
+            
+            // Write the generated code to a file
+            await File.WriteAllTextAsync(outputFile, result);
+            
+            Console.WriteLine($"Generated {outputFile}");
+        }
+        
+        private static List<PropertyInfo> GetTypeProperties(Type type)
+        {
+            return type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Select(p => BuildPropertyInfo(p))
                 .ToList();
+        }
+        
+        private static object CreateTemplateContext(Type type, List<PropertyInfo> properties)
+        {
+            // Create property size calculation and serialization code blocks
+            string sizeCalculation = CreateSizeCalculationCode(properties);
+            string serializeCode = CreateSerializeCode(properties);
+            string deserializeCode = CreateDeserializeCode(properties);
             
-            // Create property size calculation and serialization code blocks as strings
-            string sizeCalculation = string.Join("\n            ", properties.Select(p => $"// Size of {p.Name} ({p.Type})\nsize += {p.SizeCalculation};"));
-            
-            string serializeCode = string.Join("\n            ", properties.Select(p => $"// Serialize {p.Name} ({p.Type})\n{p.SerializeCode}"));
-            
-            string deserializeCode = string.Join("\n            ", properties.Select(p => $"// Read {p.Name}\n{p.DeserializeCode}"));
-                
-            // Render template with type and property information
+            // Generate instance variable name (camelCase)
             var instanceVarName = char.ToLowerInvariant(type.Name[0]) + type.Name.Substring(1);
-            var templateContext = new
+            
+            // Create template context
+            return new
             {
                 class_name = type.Name,
                 full_type_name = GetFullTypeName(type),
@@ -147,13 +183,24 @@ namespace YoloSerializer.Generator
                 deserialize_code = deserializeCode,
                 properties = properties
             };
-            
-            var result = await template.RenderAsync(templateContext);
-            
-            // Write the generated code to a file
-            await File.WriteAllTextAsync(outputFile, result);
-            
-            Console.WriteLine($"Generated {outputFile}");
+        }
+        
+        private static string CreateSizeCalculationCode(List<PropertyInfo> properties)
+        {
+            return string.Join("\n            ", properties.Select(p => 
+                $"// Size of {p.Name} ({p.Type})\nsize += {p.SizeCalculation};"));
+        }
+        
+        private static string CreateSerializeCode(List<PropertyInfo> properties)
+        {
+            return string.Join("\n            ", properties.Select(p => 
+                $"// Serialize {p.Name} ({p.Type})\n{p.SerializeCode}"));
+        }
+        
+        private static string CreateDeserializeCode(List<PropertyInfo> properties)
+        {
+            return string.Join("\n            ", properties.Select(p => 
+                $"// Read {p.Name}\n{p.DeserializeCode}"));
         }
         
         private static async Task GenerateTypeMap(List<Type> serializableTypes, string outputPath, bool forceRegeneration)
@@ -171,6 +218,34 @@ namespace YoloSerializer.Generator
             
             // Build the map file content
             var sb = new StringBuilder();
+            
+            // Generate imports
+            AppendImports(sb);
+            
+            // Begin class definition
+            AppendClassHeader(sb);
+            
+            // Generate type IDs
+            AppendTypeIds(sb, serializableTypes);
+            
+            // Generate methods
+            AppendGetTypeIdMethod(sb, serializableTypes);
+            AppendSerializeMethod(sb, serializableTypes);
+            AppendGetSizeMethod(sb, serializableTypes);
+            AppendDeserializeMethod(sb, serializableTypes);
+            
+            // Close class
+            sb.AppendLine("    }");
+            sb.AppendLine("}");
+            
+            // Write the generated code to a file
+            await File.WriteAllTextAsync(outputFile, sb.ToString());
+            
+            Console.WriteLine($"Generated {outputFile}");
+        }
+        
+        private static void AppendImports(StringBuilder sb)
+        {
             sb.AppendLine("using System;");
             sb.AppendLine("using System.Buffers.Binary;");
             sb.AppendLine("using System.Runtime.CompilerServices;");
@@ -181,6 +256,10 @@ namespace YoloSerializer.Generator
             sb.AppendLine();
             sb.AppendLine("namespace YoloSerializer.Tests.Generated");
             sb.AppendLine("{");
+        }
+        
+        private static void AppendClassHeader(StringBuilder sb)
+        {
             sb.AppendLine("    /// <summary>");
             sb.AppendLine("    /// Hard-coded map of type IDs to serializers for maximum performance");
             sb.AppendLine("    /// </summary>");
@@ -203,8 +282,10 @@ namespace YoloSerializer.Generator
             sb.AppendLine("        public const byte NULL_TYPE_ID = 0;");
             sb.AppendLine();
             sb.AppendLine("        #region codegen");
-            
-            // Add type IDs for each serializable type
+        }
+        
+        private static void AppendTypeIds(StringBuilder sb, List<Type> serializableTypes)
+        {
             byte typeId = 1;
             foreach (var type in serializableTypes)
             {
@@ -223,6 +304,10 @@ namespace YoloSerializer.Generator
             sb.AppendLine("        /// </summary>");
             sb.AppendLine("        byte ITypeMap.NullTypeId => NULL_TYPE_ID;");
             sb.AppendLine("        ");
+        }
+        
+        private static void AppendGetTypeIdMethod(StringBuilder sb, List<Type> serializableTypes)
+        {
             sb.AppendLine("        /// <summary>");
             sb.AppendLine("        /// Gets the type ID for a type");
             sb.AppendLine("        /// </summary>");
@@ -233,7 +318,6 @@ namespace YoloSerializer.Generator
             sb.AppendLine();
             sb.AppendLine("            #region codegen");
             
-            // Add type ID lookup for each serializable type
             foreach (var type in serializableTypes)
             {
                 string typeName = type.Name.ToUpperInvariant();
@@ -246,6 +330,10 @@ namespace YoloSerializer.Generator
             sb.AppendLine("            throw new ArgumentException($\"Unknown type: {type.Name}\");");
             sb.AppendLine("        }");
             sb.AppendLine("        ");
+        }
+        
+        private static void AppendSerializeMethod(StringBuilder sb, List<Type> serializableTypes)
+        {
             sb.AppendLine("        /// <summary>");
             sb.AppendLine("        /// Serializes an object to a byte span without boxing");
             sb.AppendLine("        /// </summary>");
@@ -255,11 +343,11 @@ namespace YoloSerializer.Generator
             sb.AppendLine("            switch (obj)");
             sb.AppendLine("            {");
             
-            // Add serialization cases for each type
             foreach (var type in serializableTypes)
             {
-                sb.AppendLine($"                case {type.Name} {char.ToLower(type.Name[0])}{type.Name.Substring(1)}:");
-                sb.AppendLine($"                    {type.Name}Serializer.Instance.Serialize({char.ToLower(type.Name[0])}{type.Name.Substring(1)}, buffer, ref offset);");
+                string varName = char.ToLower(type.Name[0]) + type.Name.Substring(1);
+                sb.AppendLine($"                case {type.Name} {varName}:");
+                sb.AppendLine($"                    {type.Name}Serializer.Instance.Serialize({varName}, buffer, ref offset);");
                 sb.AppendLine("                    break;");
                 sb.AppendLine("                ");
             }
@@ -269,6 +357,10 @@ namespace YoloSerializer.Generator
             sb.AppendLine("            }");
             sb.AppendLine("        }");
             sb.AppendLine("        ");
+        }
+        
+        private static void AppendGetSizeMethod(StringBuilder sb, List<Type> serializableTypes)
+        {
             sb.AppendLine("        /// <summary>");
             sb.AppendLine("        /// Gets the serialized size of an object without boxing");
             sb.AppendLine("        /// </summary>");
@@ -278,11 +370,11 @@ namespace YoloSerializer.Generator
             sb.AppendLine("            switch (obj)");
             sb.AppendLine("            {");
             
-            // Add size calculation cases for each type
             foreach (var type in serializableTypes)
             {
-                sb.AppendLine($"                case {type.Name} {char.ToLower(type.Name[0])}{type.Name.Substring(1)}:");
-                sb.AppendLine($"                    return {type.Name}Serializer.Instance.GetSize({char.ToLower(type.Name[0])}{type.Name.Substring(1)});");
+                string varName = char.ToLower(type.Name[0]) + type.Name.Substring(1);
+                sb.AppendLine($"                case {type.Name} {varName}:");
+                sb.AppendLine($"                    return {type.Name}Serializer.Instance.GetSize({varName});");
                 sb.AppendLine("                ");
             }
             
@@ -291,6 +383,10 @@ namespace YoloSerializer.Generator
             sb.AppendLine("            }");
             sb.AppendLine("        }");
             sb.AppendLine("        ");
+        }
+        
+        private static void AppendDeserializeMethod(StringBuilder sb, List<Type> serializableTypes)
+        {
             sb.AppendLine("        /// <summary>");
             sb.AppendLine("        /// Deserializes an object from a byte span based on type ID");
             sb.AppendLine("        /// </summary>");
@@ -300,14 +396,14 @@ namespace YoloSerializer.Generator
             sb.AppendLine("            switch (typeId)");
             sb.AppendLine("            {");
             
-            // Add deserialization cases for each type
             foreach (var type in serializableTypes)
             {
                 string typeName = type.Name.ToUpperInvariant();
+                string varName = char.ToLower(type.Name[0]) + type.Name.Substring(1);
                 sb.AppendLine($"                case {typeName}_TYPE_ID:");
-                sb.AppendLine($"                    {type.Name}? {char.ToLower(type.Name[0])}{type.Name.Substring(1)}Result;");
-                sb.AppendLine($"                    {type.Name}Serializer.Instance.Deserialize(out {char.ToLower(type.Name[0])}{type.Name.Substring(1)}Result, buffer, ref offset);");
-                sb.AppendLine($"                    return {char.ToLower(type.Name[0])}{type.Name.Substring(1)}Result;");
+                sb.AppendLine($"                    {type.Name}? {varName}Result;");
+                sb.AppendLine($"                    {type.Name}Serializer.Instance.Deserialize(out {varName}Result, buffer, ref offset);");
+                sb.AppendLine($"                    return {varName}Result;");
                 sb.AppendLine("                ");
             }
             
@@ -315,15 +411,8 @@ namespace YoloSerializer.Generator
             sb.AppendLine("                    throw new ArgumentException($\"Unknown type ID: {typeId}\");");
             sb.AppendLine("            }");
             sb.AppendLine("        }");
-            sb.AppendLine("    }");
-            sb.AppendLine("}");
-            
-            // Write the generated code to a file
-            await File.WriteAllTextAsync(outputFile, sb.ToString());
-            
-            Console.WriteLine($"Generated {outputFile}");
         }
-
+        
         private static async Task GenerateYoloSerializer(string outputPath, bool forceRegeneration)
         {
             string outputFile = Path.Combine(outputPath, "YoloGeneratedSerializer.cs");
@@ -339,6 +428,30 @@ namespace YoloSerializer.Generator
             
             // Build the serializer file content
             var sb = new StringBuilder();
+            
+            // Generate imports and class definition
+            AppendSerializerImports(sb);
+            AppendSerializerClassHeader(sb);
+            
+            // Generate methods
+            AppendGenericSerializeMethods(sb);
+            AppendTypeSpecificSerializeMethods(sb);
+            AppendGenericDeserializeMethods(sb);
+            AppendTypeSpecificDeserializeMethods(sb);
+            AppendSizeCalculationMethods(sb);
+            
+            // Close class
+            sb.AppendLine("    }");
+            sb.AppendLine("}");
+            
+            // Write the generated code to a file
+            await File.WriteAllTextAsync(outputFile, sb.ToString());
+            
+            Console.WriteLine($"Generated {outputFile}");
+        }
+        
+        private static void AppendSerializerImports(StringBuilder sb)
+        {
             sb.AppendLine("using System;");
             sb.AppendLine("using System.Buffers.Binary;");
             sb.AppendLine("using System.Runtime.CompilerServices;");
@@ -350,32 +463,26 @@ namespace YoloSerializer.Generator
             sb.AppendLine();
             sb.AppendLine("namespace YoloSerializer.Core.Serializers");
             sb.AppendLine("{");
-            sb.AppendLine("    /// <summary>");
-            sb.AppendLine("    /// High-performance serializer using YoloGeneratedMap for optimal dispatch");
-            sb.AppendLine("    /// </summary>");
+        }
+        
+        private static void AppendSerializerClassHeader(StringBuilder sb)
+        {
             sb.AppendLine("    public sealed class YoloGeneratedSerializer");
             sb.AppendLine("    {");
             sb.AppendLine("        private static readonly YoloGeneratedSerializer _instance = new YoloGeneratedSerializer();");
             sb.AppendLine("        private readonly GeneratedSerializer<YoloGeneratedMap> _serializer;");
             sb.AppendLine("        ");
-            sb.AppendLine("        /// <summary>");
-            sb.AppendLine("        /// Singleton instance for performance");
-            sb.AppendLine("        /// </summary>");
             sb.AppendLine("        public static YoloGeneratedSerializer Instance => _instance;");
             sb.AppendLine("        ");
-            sb.AppendLine("        /// <summary>");
-            sb.AppendLine("        /// Constructor - initializes with YoloGeneratedMap");
-            sb.AppendLine("        /// </summary>");
             sb.AppendLine("        private YoloGeneratedSerializer()");
             sb.AppendLine("        {");
             sb.AppendLine("            _serializer = new GeneratedSerializer<YoloGeneratedMap>(YoloGeneratedMap.Instance);");
             sb.AppendLine("        }");
             sb.AppendLine("        ");
-
-            // Add generic methods for backward compatibility
-            sb.AppendLine("        /// <summary>");
-            sb.AppendLine("        /// Serializes an object to a byte span");
-            sb.AppendLine("        /// </summary>");
+        }
+        
+        private static void AppendGenericSerializeMethods(StringBuilder sb)
+        {
             sb.AppendLine("        [MethodImpl(MethodImplOptions.AggressiveInlining)]");
             sb.AppendLine("        public void Serialize<T>(T? obj, Span<byte> buffer, ref int offset) where T : class");
             sb.AppendLine("        {");
@@ -383,41 +490,26 @@ namespace YoloSerializer.Generator
             sb.AppendLine("        }");
             sb.AppendLine("        ");
             
-            sb.AppendLine("        /// <summary>");
-            sb.AppendLine("        /// Serializes an object to a byte span with pre-computed size");
-            sb.AppendLine("        /// </summary>");
             sb.AppendLine("        [MethodImpl(MethodImplOptions.AggressiveInlining)]");
             sb.AppendLine("        public void SerializeWithoutSizeCheck<T>(T? obj, Span<byte> buffer, ref int offset) where T : class");
             sb.AppendLine("        {");
             sb.AppendLine("            _serializer.SerializeWithoutSizeCheck(obj, buffer, ref offset);");
             sb.AppendLine("        }");
             sb.AppendLine("        ");
-            
-            // Generate type-specific methods
+        }
+        
+        private static void AppendTypeSpecificSerializeMethods(StringBuilder sb)
+        {
+            // Generate type-specific methods for serializing
             foreach (var serializableType in ExplicitSerializableTypes)
             {
                 string typeName = serializableType.Name;
-                
-                // Serialize method
-                sb.AppendLine($"        /// <summary>");
-                sb.AppendLine($"        /// Serializes a {typeName} object to a byte span");
-                sb.AppendLine($"        /// </summary>");
                 sb.AppendLine($"        [MethodImpl(MethodImplOptions.AggressiveInlining)]");
                 sb.AppendLine($"        public void Serialize({typeName}? obj, Span<byte> buffer, ref int offset)");
                 sb.AppendLine($"        {{");
                 sb.AppendLine($"            _serializer.Serialize(obj, buffer, ref offset);");
                 sb.AppendLine($"        }}");
                 sb.AppendLine($"        ");
-            }
-            
-            foreach (var serializableType in ExplicitSerializableTypes)
-            {
-                string typeName = serializableType.Name;
-                
-                // SerializeWithoutSizeCheck method
-                sb.AppendLine($"        /// <summary>");
-                sb.AppendLine($"        /// Serializes a {typeName} object to a byte span with pre-computed size");
-                sb.AppendLine($"        /// </summary>");
                 sb.AppendLine($"        [MethodImpl(MethodImplOptions.AggressiveInlining)]");
                 sb.AppendLine($"        public void SerializeWithoutSizeCheck({typeName}? obj, Span<byte> buffer, ref int offset)");
                 sb.AppendLine($"        {{");
@@ -425,37 +517,29 @@ namespace YoloSerializer.Generator
                 sb.AppendLine($"        }}");
                 sb.AppendLine($"        ");
             }
-            
-            // Add the general deserialize method
-            sb.AppendLine("        /// <summary>");
-            sb.AppendLine("        /// Deserializes an object from a byte span");
-            sb.AppendLine("        /// </summary>");
+        }
+        
+        private static void AppendGenericDeserializeMethods(StringBuilder sb)
+        {
             sb.AppendLine("        [MethodImpl(MethodImplOptions.AggressiveInlining)]");
             sb.AppendLine("        public object? Deserialize(ReadOnlySpan<byte> buffer, ref int offset)");
             sb.AppendLine("        {");
             sb.AppendLine("            return _serializer.Deserialize(buffer, ref offset);");
             sb.AppendLine("        }");
             sb.AppendLine("        ");
-            
-            // Add generic deserialize method for backward compatibility
-            sb.AppendLine("        /// <summary>");
-            sb.AppendLine("        /// Deserializes an object from a byte span with strong typing");
-            sb.AppendLine("        /// </summary>");
             sb.AppendLine("        [MethodImpl(MethodImplOptions.AggressiveInlining)]");
             sb.AppendLine("        public T? Deserialize<T>(ReadOnlySpan<byte> buffer, ref int offset) where T : class");
             sb.AppendLine("        {");
             sb.AppendLine("            return _serializer.Deserialize<T>(buffer, ref offset);");
             sb.AppendLine("        }");
             sb.AppendLine("        ");
-            
-            // Type-specific deserialize methods
+        }
+        
+        private static void AppendTypeSpecificDeserializeMethods(StringBuilder sb)
+        {
             foreach (var serializableType in ExplicitSerializableTypes)
             {
                 string typeName = serializableType.Name;
-                
-                sb.AppendLine($"        /// <summary>");
-                sb.AppendLine($"        /// Deserializes a {typeName} object from a byte span");
-                sb.AppendLine($"        /// </summary>");
                 sb.AppendLine($"        [MethodImpl(MethodImplOptions.AggressiveInlining)]");
                 sb.AppendLine($"        public {typeName}? Deserialize{typeName}(ReadOnlySpan<byte> buffer, ref int offset)");
                 sb.AppendLine($"        {{");
@@ -463,26 +547,19 @@ namespace YoloSerializer.Generator
                 sb.AppendLine($"        }}");
                 sb.AppendLine($"        ");
             }
-            
-            // Add generic size calculation method for backward compatibility
-            sb.AppendLine("        /// <summary>");
-            sb.AppendLine("        /// Gets the serialized size of an object");
-            sb.AppendLine("        /// </summary>");
+        }
+        
+        private static void AppendSizeCalculationMethods(StringBuilder sb)
+        {
             sb.AppendLine("        [MethodImpl(MethodImplOptions.AggressiveInlining)]");
             sb.AppendLine("        public int GetSerializedSize<T>(T? obj) where T : class");
             sb.AppendLine("        {");
             sb.AppendLine("            return _serializer.GetSerializedSize(obj);");
             sb.AppendLine("        }");
             sb.AppendLine("        ");
-            
-            // Size calculation methods
             foreach (var serializableType in ExplicitSerializableTypes)
             {
                 string typeName = serializableType.Name;
-                
-                sb.AppendLine($"        /// <summary>");
-                sb.AppendLine($"        /// Gets the serialized size of a {typeName} object");
-                sb.AppendLine($"        /// </summary>");
                 sb.AppendLine($"        [MethodImpl(MethodImplOptions.AggressiveInlining)]");
                 sb.AppendLine($"        public int GetSerializedSize({typeName}? obj)");
                 sb.AppendLine($"        {{");
@@ -490,14 +567,6 @@ namespace YoloSerializer.Generator
                 sb.AppendLine($"        }}");
                 sb.AppendLine($"        ");
             }
-            
-            sb.AppendLine("    }");
-            sb.AppendLine("}");
-            
-            // Write the generated code to a file
-            await File.WriteAllTextAsync(outputFile, sb.ToString());
-            
-            Console.WriteLine($"Generated {outputFile}");
         }
         
         private static PropertyInfo BuildPropertyInfo(System.Reflection.PropertyInfo property)
@@ -512,52 +581,56 @@ namespace YoloSerializer.Generator
             Type propertyType = property.PropertyType;
             Type unwrappedType = Nullable.GetUnderlyingType(propertyType) ?? propertyType;
             
-            // Check if the property type is one of our serializable types
-            bool isSerializableType = false;
-            foreach (var type in ExplicitSerializableTypes)
-            {
-                if (unwrappedType == type)
-                {
-                    isSerializableType = true;
-                    break;
-                }
-            }
-            propertyInfo.IsYoloSerializable = isSerializableType;
+            // Check if this is a serializable type (from our explicit list)
+            propertyInfo.IsYoloSerializable = IsExplicitSerializableType(unwrappedType);
             
-            // Handle lists
-            if (typeof(IList).IsAssignableFrom(unwrappedType) && unwrappedType.IsGenericType)
+            // Determine the type of property and set appropriate serialization code
+            if (IsList(unwrappedType))
             {
                 propertyInfo.IsList = true;
-                var elementType = unwrappedType.GetGenericArguments()[0];
-                propertyInfo.ElementType = GetFullTypeName(elementType);
-                
+                propertyInfo.ElementType = GetElementType(unwrappedType);
                 SetListPropertyCodeAndSize(propertyInfo, property);
             }
-            // Handle dictionaries
-            else if (typeof(IDictionary).IsAssignableFrom(unwrappedType) && unwrappedType.IsGenericType)
+            else if (IsDictionary(unwrappedType))
             {
                 propertyInfo.IsDictionary = true;
                 var genericArgs = unwrappedType.GetGenericArguments();
                 propertyInfo.KeyType = GetFullTypeName(genericArgs[0]);
                 propertyInfo.ValueType = GetFullTypeName(genericArgs[1]);
-                
                 SetDictionaryPropertyCodeAndSize(propertyInfo, property);
             }
-            // Handle arrays
             else if (unwrappedType.IsArray)
             {
                 propertyInfo.IsArray = true;
                 propertyInfo.ElementType = GetFullTypeName(unwrappedType.GetElementType());
-                
                 SetArrayPropertyCodeAndSize(propertyInfo, property);
             }
-            // Handle standard types
             else
             {
                 SetStandardPropertyCodeAndSize(propertyInfo, property);
             }
             
             return propertyInfo;
+        }
+        
+        private static bool IsExplicitSerializableType(Type type)
+        {
+            return ExplicitSerializableTypes.Contains(type);
+        }
+        
+        private static bool IsList(Type type)
+        {
+            return typeof(IList).IsAssignableFrom(type) && type.IsGenericType;
+        }
+        
+        private static bool IsDictionary(Type type) 
+        {
+            return typeof(IDictionary).IsAssignableFrom(type) && type.IsGenericType;
+        }
+        
+        private static string GetElementType(Type listType)
+        {
+            return GetFullTypeName(listType.GetGenericArguments()[0]);
         }
         
         private static void SetStandardPropertyCodeAndSize(PropertyInfo propertyInfo, System.Reflection.PropertyInfo property)
@@ -723,11 +796,9 @@ namespace YoloSerializer.Generator
             string instancePropRef = $"{char.ToLowerInvariant(property.DeclaringType.Name[0])}{property.DeclaringType.Name.Substring(1)}.{propName}";
             string localVarName = "_local_" + char.ToLowerInvariant(propName[0]) + propName.Substring(1);
             
-            // Size calculation
             propertyInfo.SizeCalculation = $"Int32Serializer.Instance.GetSize({instancePropRef}.Count) + " +
                                             $"{instancePropRef}.Sum(listItem => {GetSerializerForType(elementType)}.Instance.GetSize(listItem))";
             
-            // Serialize code
             propertyInfo.SerializeCode = 
                 $"Int32Serializer.Instance.Serialize({instancePropRef}.Count, buffer, ref offset);\n" +
                 $"            foreach (var listItem in {instancePropRef})\n" +
@@ -735,7 +806,6 @@ namespace YoloSerializer.Generator
                 $"                {GetSerializerForType(elementType)}.Instance.Serialize(listItem, buffer, ref offset);\n" +
                 $"            }}";
                 
-            // Deserialize code
             propertyInfo.DeserializeCode = 
                 $"Int32Serializer.Instance.Deserialize(out int {localVarName}Count, buffer, ref offset);\n" +
                 $"            {instancePropRef}.Clear();\n" +
@@ -823,67 +893,77 @@ namespace YoloSerializer.Generator
         {
             Type unwrappedType = Nullable.GetUnderlyingType(type) ?? type;
             
-            if (unwrappedType == typeof(int)) return "Int32Serializer";
-            if (unwrappedType == typeof(float)) return "FloatSerializer";
-            if (unwrappedType == typeof(double)) return "DoubleSerializer";
-            if (unwrappedType == typeof(long)) return "Int64Serializer";
-            if (unwrappedType == typeof(bool)) return "BooleanSerializer";
-            if (unwrappedType == typeof(string)) return "StringSerializer";
-            
-            // New primitive types
-            if (unwrappedType == typeof(byte)) return "ByteSerializer";
-            if (unwrappedType == typeof(sbyte)) return "SByteSerializer";
-            if (unwrappedType == typeof(char)) return "CharSerializer";
-            if (unwrappedType == typeof(short)) return "Int16Serializer";
-            if (unwrappedType == typeof(ushort)) return "UInt16Serializer";
-            if (unwrappedType == typeof(uint)) return "UInt32Serializer";
-            if (unwrappedType == typeof(ulong)) return "UInt64Serializer";
-            if (unwrappedType == typeof(decimal)) return "DecimalSerializer";
-            if (unwrappedType == typeof(DateTime)) return "DateTimeSerializer";
-            if (unwrappedType == typeof(TimeSpan)) return "TimeSpanSerializer";
-            if (unwrappedType == typeof(Guid)) return "GuidSerializer";
+            // Check built-in primitive types first
+            if (PrimitiveTypeSerializers.TryGetValue(unwrappedType, out string serializerName))
+                return serializerName;
             
             // For enums
-            if (unwrappedType.IsEnum) return $"EnumSerializer<{GetFullTypeName(unwrappedType)}>";
+            if (unwrappedType.IsEnum) 
+                return $"EnumSerializer<{GetFullTypeName(unwrappedType)}>";
             
             // For custom serializable types
-            foreach (var serializableType in ExplicitSerializableTypes)
-            {
-                if (unwrappedType == serializableType)
-                {
-                    return $"{serializableType.Name}Serializer";
-                }
-            }
+            if (IsExplicitSerializableType(unwrappedType))
+                return $"{unwrappedType.Name}Serializer";
             
             throw new ArgumentException($"No serializer found for type {unwrappedType.Name}");
         }
         
+        // Dictionary mapping primitive types to their serializer names
+        private static readonly Dictionary<Type, string> PrimitiveTypeSerializers = new Dictionary<Type, string>
+        {
+            { typeof(int), "Int32Serializer" },
+            { typeof(float), "FloatSerializer" },
+            { typeof(double), "DoubleSerializer" },
+            { typeof(long), "Int64Serializer" },
+            { typeof(bool), "BooleanSerializer" },
+            { typeof(string), "StringSerializer" },
+            { typeof(byte), "ByteSerializer" },
+            { typeof(sbyte), "SByteSerializer" },
+            { typeof(char), "CharSerializer" },
+            { typeof(short), "Int16Serializer" },
+            { typeof(ushort), "UInt16Serializer" },
+            { typeof(uint), "UInt32Serializer" },
+            { typeof(ulong), "UInt64Serializer" },
+            { typeof(decimal), "DecimalSerializer" },
+            { typeof(DateTime), "DateTimeSerializer" },
+            { typeof(TimeSpan), "TimeSpanSerializer" },
+            { typeof(Guid), "GuidSerializer" }
+        };
+        
+        // Dictionary mapping types to their C# keywords
+        private static readonly Dictionary<Type, string> TypeNameMappings = new Dictionary<Type, string>
+        {
+            { typeof(int), "int" },
+            { typeof(float), "float" },
+            { typeof(double), "double" },
+            { typeof(long), "long" },
+            { typeof(bool), "bool" },
+            { typeof(string), "string" },
+            { typeof(byte), "byte" },
+            { typeof(sbyte), "sbyte" },
+            { typeof(char), "char" },
+            { typeof(short), "short" },
+            { typeof(ushort), "ushort" },
+            { typeof(uint), "uint" },
+            { typeof(ulong), "ulong" },
+            { typeof(decimal), "decimal" },
+            { typeof(DateTime), "DateTime" },
+            { typeof(TimeSpan), "TimeSpan" },
+            { typeof(Guid), "Guid" }
+        };
+        
         private static string GetFullTypeName(Type type)
         {
-            if (type == typeof(int)) return "int";
-            if (type == typeof(float)) return "float";
-            if (type == typeof(double)) return "double";
-            if (type == typeof(long)) return "long";
-            if (type == typeof(bool)) return "bool";
-            if (type == typeof(string)) return "string";
-            if (type == typeof(byte)) return "byte";
-            if (type == typeof(sbyte)) return "sbyte";
-            if (type == typeof(char)) return "char";
-            if (type == typeof(short)) return "short";
-            if (type == typeof(ushort)) return "ushort";
-            if (type == typeof(uint)) return "uint";
-            if (type == typeof(ulong)) return "ulong";
-            if (type == typeof(decimal)) return "decimal";
-            if (type == typeof(DateTime)) return "DateTime";
-            if (type == typeof(TimeSpan)) return "TimeSpan";
-            if (type == typeof(Guid)) return "Guid";
+            // Handle primitive types with keywords
+            if (TypeNameMappings.TryGetValue(type, out string typeName))
+                return typeName;
             
+            // Handle nullable types
             Type? nullableUnderlyingType = Nullable.GetUnderlyingType(type);
             if (nullableUnderlyingType != null)
-            {
                 return $"{GetFullTypeName(nullableUnderlyingType)}?";
-            }
             
+            // Handle generic types
             if (type.IsGenericType)
             {
                 var genericTypeName = type.GetGenericTypeDefinition().Name;
@@ -893,11 +973,11 @@ namespace YoloSerializer.Generator
                 return $"{genericTypeName}<{genericArgs}>";
             }
             
+            // Handle arrays
             if (type.IsArray)
-            {
                 return $"{GetFullTypeName(type.GetElementType())}[]";
-            }
             
+            // Default to type name
             return type.Name;
         }
         
