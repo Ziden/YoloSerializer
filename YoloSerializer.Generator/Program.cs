@@ -1,5 +1,7 @@
 ﻿using System.Reflection;
 using Scriban;
+using YoloSerializer.Core.Models;
+using YoloSerializer.Core.ModelsYolo;
 using YoloSerializer.Generator.Models;
 
 namespace YoloSerializer.Generator;
@@ -9,9 +11,9 @@ public class Program
     // Define explicitly serializable types here
     private static readonly Type[] ExplicitSerializableTypes = new[]
     {
-        typeof(YoloSerializer.Core.Models.PlayerData),
-        typeof(YoloSerializer.Core.ModelsYolo.Position),
-        typeof(YoloSerializer.Core.Models.AllTypesData)
+        typeof(PlayerData),
+        typeof(Position),
+        typeof(AllTypesData)
     };
 
     static async Task Main(string[] args)

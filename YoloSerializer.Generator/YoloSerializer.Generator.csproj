@@ -12,7 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ExampleUsage\ExampleUsage.csproj" />
+    <ProjectReference Include="..\ExampleUsage\YoloSerializer.Example.csproj" />
   </ItemGroup>
 
 </Project>
