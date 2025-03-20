@@ -71,6 +71,6 @@ public class Program
     private static string GetDefaultOutputPath()
     {
         var solutionDir = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", ".."));
-        return Path.GetFullPath(Path.Combine(solutionDir, "YoloSerializer.Tests", "Generated"));
+        return Path.GetFullPath(Path.Combine(solutionDir, "ExampleUsage", "Generated"));
     }
 }

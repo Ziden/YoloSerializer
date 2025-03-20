@@ -2,7 +2,6 @@ using System;
 using Xunit;
 using YoloSerializer.Core.Models;
 using YoloSerializer.Core.Serializers;
-using YoloSerializer.Tests.Generated;
 
 namespace YoloSerializer.Tests
 {

@@ -14,6 +14,8 @@ namespace YoloSerializer.Generator.Models
         public string SizeCalculation { get; set; }
         public string SerializeCode { get; set; }
         public string DeserializeCode { get; set; }
+        public string Namespace { get; set; }
+        public string TypeNamespace { get; set; }
         public List<PropertyTemplateModel> Properties { get; set; }
     }
 

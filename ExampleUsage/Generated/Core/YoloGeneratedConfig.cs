@@ -1,0 +1,16 @@
+using System;
+using System.Collections.Generic;
+using YoloSerializer.Core.Models;
+
+namespace YoloSerializer.Generated.Core
+{
+    public static class YoloGeneratedConfig
+    {
+        public static readonly HashSet<Type> SerializableTypes = new()
+        {
+            typeof(PlayerData),
+            typeof(Position),
+            typeof(AllTypesData),
+        };
+    }
+}

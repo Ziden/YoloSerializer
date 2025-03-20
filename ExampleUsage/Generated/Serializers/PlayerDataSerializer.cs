@@ -15,7 +15,7 @@ namespace YoloSerializer.Core.Serializers
     /// <summary>
     /// High-performance serializer for PlayerData objects
     /// </summary>
-    public sealed class PlayerDataSerializer : ISerializer<PlayerData?>
+    public sealed class PlayerDataSerializer : ISerializer<YoloSerializer.Core.Models.PlayerData?>
     {
         private static readonly PlayerDataSerializer _instance = new PlayerDataSerializer();
         
@@ -42,7 +42,7 @@ namespace YoloSerializer.Core.Serializers
         /// Gets the total size needed to serialize the PlayerData
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int GetSize(PlayerData? playerData)
+        public int GetSize(YoloSerializer.Core.Models.PlayerData? playerData)
         {
 
             if (playerData == null)
@@ -65,7 +65,7 @@ namespace YoloSerializer.Core.Serializers
         /// Serializes a PlayerData object to a byte span
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Serialize(PlayerData? playerData, Span<byte> buffer, ref int offset)
+        public void Serialize(YoloSerializer.Core.Models.PlayerData? playerData, Span<byte> buffer, ref int offset)
         {
 
             if (playerData == null)
@@ -93,7 +93,7 @@ namespace YoloSerializer.Core.Serializers
         /// Deserializes a PlayerData object from a byte span
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Deserialize(out PlayerData? value, ReadOnlySpan<byte> buffer, ref int offset)
+        public void Deserialize(out YoloSerializer.Core.Models.PlayerData? value, ReadOnlySpan<byte> buffer, ref int offset)
         {
 
             // Get a PlayerData instance from pool

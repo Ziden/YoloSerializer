@@ -13,6 +13,7 @@ namespace YoloSerializer.Generator
     public class CodeGenerator
     {
         private Type[] _serializableTypes;
+        private GeneratorConfig _config;
 
         private static class TypeHelper
         {
@@ -82,15 +83,28 @@ namespace YoloSerializer.Generator
         public async Task GenerateSerializers(List<Type> serializableTypes, Template template, GeneratorConfig config)
         {
             _serializableTypes = serializableTypes.ToArray();
+            _config = config;
+            
+            // Create output directories
+            var outputPath = config.OutputPath;
+            var serializersPath = Path.Combine(outputPath, "Serializers");
+            var mapsPath = Path.Combine(outputPath, "Maps");
+            var corePath = Path.Combine(outputPath, "Core");
+
+            Directory.CreateDirectory(serializersPath);
+            Directory.CreateDirectory(mapsPath);
+            Directory.CreateDirectory(corePath);
+
             // Generate individual serializers for each type
             foreach (var type in serializableTypes)
             {
-                await GenerateSerializer(type, template, config.OutputPath, config.ForceRegeneration);
+                await GenerateSerializer(type, template, serializersPath, config.ForceRegeneration);
             }
 
             // Generate support files
-            await GenerateTypeMap(serializableTypes, config.OutputPath, config.ForceRegeneration);
-            await GenerateYoloSerializer(config.OutputPath, config.ForceRegeneration);
+            await GenerateTypeMap(serializableTypes, mapsPath, config.ForceRegeneration);
+            await GenerateYoloSerializer(corePath, config.ForceRegeneration);
+            await GenerateConfiguration(serializableTypes, corePath, config.ForceRegeneration);
         }
 
         internal async Task GenerateSerializer(Type type, Template template, string outputPath, bool forceRegeneration)
@@ -166,7 +180,7 @@ namespace YoloSerializer.Generator
             return new SerializerTemplateModel
             {
                 ClassName = className,
-                FullTypeName = fullTypeName,
+                FullTypeName = type.FullName,
                 SerializerName = serializerName,
                 InstanceVarName = instanceVarName,
                 IsClass = isClass,
@@ -175,6 +189,8 @@ namespace YoloSerializer.Generator
                 SizeCalculation = sizeCalculation,
                 SerializeCode = serializeCode,
                 DeserializeCode = deserializeCode,
+                Namespace = _config.GeneratedNamespace,
+                TypeNamespace = type.Namespace,
                 Properties = properties.Select(p => new PropertyTemplateModel
                 {
                     Name = p.Name,
@@ -262,9 +278,9 @@ namespace YoloSerializer.Generator
             sb.AppendLine("using YoloSerializer.Core.Contracts;");
             sb.AppendLine("using YoloSerializer.Core.Models;");
             sb.AppendLine("using YoloSerializer.Core.Serializers;");
-            sb.AppendLine("using YoloSerializer.Tests.Generated;");
+            sb.AppendLine($"using {_config.GeneratedNamespace};");
             sb.AppendLine();
-            sb.AppendLine("namespace YoloSerializer.Tests.Generated");
+            sb.AppendLine($"namespace {_config.MapsNamespace}");
             sb.AppendLine("{");
         }
 
@@ -407,10 +423,10 @@ namespace YoloSerializer.Generator
             sb.AppendLine("using System.Buffers.Binary;");
             sb.AppendLine("using System.Runtime.CompilerServices;");
             sb.AppendLine("using YoloSerializer.Core;");
-            sb.AppendLine("using YoloSerializer.Core.Models;");
+            sb.AppendLine($"using {_config.ModelsNamespace};");
             sb.AppendLine("using YoloSerializer.Core.Serializers;");
             sb.AppendLine("using YoloSerializer.Core.Contracts;");
-            sb.AppendLine("using YoloSerializer.Tests.Generated;");
+            sb.AppendLine($"using {_config.MapsNamespace};");
             sb.AppendLine("namespace YoloSerializer.Core.Serializers");
             sb.AppendLine("{");
         }
@@ -785,6 +801,42 @@ namespace YoloSerializer.Generator
         public string GetInstanceVarName(Type type)
         {
             return char.ToLowerInvariant(type.Name[0]) + type.Name.Substring(1);
+        }
+
+        internal async Task GenerateConfiguration(List<Type> serializableTypes, string outputPath, bool forceRegeneration)
+        {
+            string outputFile = Path.Combine(outputPath, "YoloGeneratedConfig.cs");
+            if (File.Exists(outputFile) && !forceRegeneration)
+            {
+                Console.WriteLine("Skipping YoloGeneratedConfig.cs - file already exists (use --force to override)");
+                return;
+            }
+            Console.WriteLine("Generating YoloGeneratedConfig.cs");
+
+            var sb = new StringBuilder();
+            sb.AppendLine("using System;");
+            sb.AppendLine("using System.Collections.Generic;");
+            sb.AppendLine($"using {_config.ModelsNamespace};");
+
+            sb.AppendLine();
+            sb.AppendLine($"namespace {_config.CoreNamespace}");
+            sb.AppendLine("{");
+            sb.AppendLine("    public static class YoloGeneratedConfig");
+            sb.AppendLine("    {");
+            sb.AppendLine("        public static readonly HashSet<Type> SerializableTypes = new()");
+            sb.AppendLine("        {");
+
+            foreach (var type in serializableTypes)
+            {
+                sb.AppendLine($"            typeof({type.Name}),");
+            }
+
+            sb.AppendLine("        };");
+            sb.AppendLine("    }");
+            sb.AppendLine("}");
+
+            await File.WriteAllTextAsync(outputFile, sb.ToString());
+            Console.WriteLine($"Generated {outputFile}");
         }
     }
 }

@@ -4,9 +4,9 @@ using System.Runtime.CompilerServices;
 using YoloSerializer.Core.Contracts;
 using YoloSerializer.Core.Models;
 using YoloSerializer.Core.Serializers;
-using YoloSerializer.Tests.Generated;
+using YoloSerializer.Generated;
 
-namespace YoloSerializer.Tests.Generated
+namespace YoloSerializer.Generated.Maps
 {
     public sealed class YoloGeneratedMap : ITypeMap
     {

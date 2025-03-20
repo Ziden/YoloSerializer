@@ -15,7 +15,7 @@ namespace YoloSerializer.Core.Serializers
     /// <summary>
     /// High-performance serializer for AllTypesData objects
     /// </summary>
-    public sealed class AllTypesDataSerializer : ISerializer<AllTypesData?>
+    public sealed class AllTypesDataSerializer : ISerializer<YoloSerializer.Core.Models.AllTypesData?>
     {
         private static readonly AllTypesDataSerializer _instance = new AllTypesDataSerializer();
         
@@ -42,7 +42,7 @@ namespace YoloSerializer.Core.Serializers
         /// Gets the total size needed to serialize the AllTypesData
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int GetSize(AllTypesData? allTypesData)
+        public int GetSize(YoloSerializer.Core.Models.AllTypesData? allTypesData)
         {
 
             if (allTypesData == null)
@@ -76,7 +76,7 @@ namespace YoloSerializer.Core.Serializers
         /// Serializes a AllTypesData object to a byte span
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Serialize(AllTypesData? allTypesData, Span<byte> buffer, ref int offset)
+        public void Serialize(YoloSerializer.Core.Models.AllTypesData? allTypesData, Span<byte> buffer, ref int offset)
         {
 
             if (allTypesData == null)
@@ -106,7 +106,7 @@ namespace YoloSerializer.Core.Serializers
         /// Deserializes a AllTypesData object from a byte span
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Deserialize(out AllTypesData? value, ReadOnlySpan<byte> buffer, ref int offset)
+        public void Deserialize(out YoloSerializer.Core.Models.AllTypesData? value, ReadOnlySpan<byte> buffer, ref int offset)
         {
 
             // Get a AllTypesData instance from pool

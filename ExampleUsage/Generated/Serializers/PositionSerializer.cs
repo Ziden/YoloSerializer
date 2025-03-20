@@ -15,7 +15,7 @@ namespace YoloSerializer.Core.Serializers
     /// <summary>
     /// High-performance serializer for Position objects
     /// </summary>
-    public sealed class PositionSerializer : ISerializer<Position?>
+    public sealed class PositionSerializer : ISerializer<YoloSerializer.Core.Models.Position?>
     {
         private static readonly PositionSerializer _instance = new PositionSerializer();
         
@@ -42,7 +42,7 @@ namespace YoloSerializer.Core.Serializers
         /// Gets the total size needed to serialize the Position
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int GetSize(Position? position)
+        public int GetSize(YoloSerializer.Core.Models.Position? position)
         {
 
             if (position == null)
@@ -61,7 +61,7 @@ namespace YoloSerializer.Core.Serializers
         /// Serializes a Position object to a byte span
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Serialize(Position? position, Span<byte> buffer, ref int offset)
+        public void Serialize(YoloSerializer.Core.Models.Position? position, Span<byte> buffer, ref int offset)
         {
 
             if (position == null)
@@ -76,7 +76,7 @@ namespace YoloSerializer.Core.Serializers
         /// Deserializes a Position object from a byte span
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Deserialize(out Position? value, ReadOnlySpan<byte> buffer, ref int offset)
+        public void Deserialize(out YoloSerializer.Core.Models.Position? value, ReadOnlySpan<byte> buffer, ref int offset)
         {
 
             // Get a Position instance from pool

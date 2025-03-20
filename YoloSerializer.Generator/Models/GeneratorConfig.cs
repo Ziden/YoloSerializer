@@ -16,5 +16,9 @@ namespace YoloSerializer.Generator.Models
         public Assembly TargetAssembly { get; set; }
         public string OutputPath { get; set; }
         public bool ForceRegeneration { get; set; }
+        public string GeneratedNamespace { get; set; } = "YoloSerializer.Generated";
+        public string MapsNamespace { get; set; } = "YoloSerializer.Generated.Maps";
+        public string CoreNamespace { get; set; } = "YoloSerializer.Generated.Core";
+        public string ModelsNamespace { get; set; } = "YoloSerializer.Core.Models";
     }
 }

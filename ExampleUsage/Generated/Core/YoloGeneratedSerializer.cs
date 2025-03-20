@@ -5,7 +5,7 @@ using YoloSerializer.Core;
 using YoloSerializer.Core.Models;
 using YoloSerializer.Core.Serializers;
 using YoloSerializer.Core.Contracts;
-using YoloSerializer.Tests.Generated;
+using YoloSerializer.Generated.Maps;
 namespace YoloSerializer.Core.Serializers
 {
     public sealed class YoloGeneratedSerializer
