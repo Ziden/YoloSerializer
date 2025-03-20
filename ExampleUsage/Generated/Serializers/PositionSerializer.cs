@@ -52,9 +52,9 @@ namespace YoloSerializer.Core.Serializers
 
             
             int size = 0;
-            size += FloatSerializer.Instance.GetSize(position.X);
-                        size += FloatSerializer.Instance.GetSize(position.Y);
-                        size += FloatSerializer.Instance.GetSize(position.Z);
+            size += SingleSerializer.Instance.GetSize(position.X);
+                        size += SingleSerializer.Instance.GetSize(position.Y);
+                        size += SingleSerializer.Instance.GetSize(position.Z);
 
             return size;
         }
@@ -69,9 +69,9 @@ namespace YoloSerializer.Core.Serializers
             if (position == null)
                 throw new ArgumentNullException(nameof(position));
 
-            FloatSerializer.Instance.Serialize(position.X, buffer, ref offset);
-                        FloatSerializer.Instance.Serialize(position.Y, buffer, ref offset);
-                        FloatSerializer.Instance.Serialize(position.Z, buffer, ref offset);
+            SingleSerializer.Instance.Serialize(position.X, buffer, ref offset);
+                        SingleSerializer.Instance.Serialize(position.Y, buffer, ref offset);
+                        SingleSerializer.Instance.Serialize(position.Z, buffer, ref offset);
         }
 
         /// <summary>
@@ -85,11 +85,11 @@ namespace YoloSerializer.Core.Serializers
             var position = _positionPool.Get();
 
 
-            FloatSerializer.Instance.Deserialize(out float _local_x, buffer, ref offset);
+            SingleSerializer.Instance.Deserialize(out float _local_x, buffer, ref offset);
                         position.X = _local_x;
-                        FloatSerializer.Instance.Deserialize(out float _local_y, buffer, ref offset);
+                        SingleSerializer.Instance.Deserialize(out float _local_y, buffer, ref offset);
                         position.Y = _local_y;
-                        FloatSerializer.Instance.Deserialize(out float _local_z, buffer, ref offset);
+                        SingleSerializer.Instance.Deserialize(out float _local_z, buffer, ref offset);
                         position.Z = _local_z;
 
             value = position;

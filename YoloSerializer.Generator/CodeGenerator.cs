@@ -61,7 +61,7 @@ namespace YoloSerializer.Generator
         private static readonly Dictionary<Type, (string Serializer, string TypeName)> PrimitiveTypeMap = new()
         {
             { typeof(int), ("Int32Serializer", "int") },
-            { typeof(float), ("FloatSerializer", "float") },
+            { typeof(float), ("SingleSerializer", "float") },
             { typeof(double), ("DoubleSerializer", "double") },
             { typeof(long), ("Int64Serializer", "long") },
             { typeof(bool), ("BooleanSerializer", "bool") },
@@ -885,8 +885,31 @@ namespace YoloSerializer.Generator
 
         private string GenerateCollectionSizeCalculation(string instancePropRef, Type elementType, Type keyType, CollectionType type)
         {
-            var elementSerializer = TypeHelper.GetSerializerForType(elementType);
-            var keySerializer = keyType != null ? TypeHelper.GetSerializerForType(keyType) : null;
+            string elementSerializer;
+            string keySerializer = null;
+            
+            // Check if the element type is in the primitive type map
+            if (PrimitiveTypeMap.TryGetValue(elementType, out var elementTypeInfo))
+            {
+                elementSerializer = elementTypeInfo.Serializer;
+            }
+            else
+            {
+                elementSerializer = TypeHelper.GetSerializerForType(elementType);
+            }
+            
+            // For dictionaries, also check if the key type is in the primitive type map
+            if (keyType != null)
+            {
+                if (PrimitiveTypeMap.TryGetValue(keyType, out var keyTypeInfo))
+                {
+                    keySerializer = keyTypeInfo.Serializer;
+                }
+                else
+                {
+                    keySerializer = TypeHelper.GetSerializerForType(keyType);
+                }
+            }
 
             return type switch
             {
@@ -903,8 +926,31 @@ namespace YoloSerializer.Generator
 
         private string GenerateCollectionSerializationCode(string instancePropRef, Type elementType, Type keyType, CollectionType type)
         {
-            var elementSerializer = TypeHelper.GetSerializerForType(elementType);
-            var keySerializer = keyType != null ? TypeHelper.GetSerializerForType(keyType) : null;
+            string elementSerializer;
+            string keySerializer = null;
+            
+            // Check if the element type is in the primitive type map
+            if (PrimitiveTypeMap.TryGetValue(elementType, out var elementTypeInfo))
+            {
+                elementSerializer = elementTypeInfo.Serializer;
+            }
+            else
+            {
+                elementSerializer = TypeHelper.GetSerializerForType(elementType);
+            }
+            
+            // For dictionaries, also check if the key type is in the primitive type map
+            if (keyType != null)
+            {
+                if (PrimitiveTypeMap.TryGetValue(keyType, out var keyTypeInfo))
+                {
+                    keySerializer = keyTypeInfo.Serializer;
+                }
+                else
+                {
+                    keySerializer = TypeHelper.GetSerializerForType(keyType);
+                }
+            }
 
             return type switch
             {

@@ -40,16 +40,16 @@ namespace YoloSerializer.Core.Serializers
     /// <summary>
     /// Serializer for single-precision floating point values
     /// </summary>
-    public sealed class FloatSerializer : ISerializer<float>
+    public sealed class SingleSerializer : ISerializer<float>
     {
-        private static readonly FloatSerializer _instance = new FloatSerializer();
+        private static readonly SingleSerializer _instance = new SingleSerializer();
         
         /// <summary>
         /// Singleton instance for performance
         /// </summary>
-        public static FloatSerializer Instance => _instance;
+        public static SingleSerializer Instance => _instance;
         
-        private FloatSerializer() { }
+        private SingleSerializer() { }
         
         /// <summary>
         /// Serializes a float to a byte span

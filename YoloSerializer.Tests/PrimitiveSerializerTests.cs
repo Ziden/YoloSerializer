@@ -48,13 +48,13 @@ namespace YoloSerializer.Tests
         }
 
         [Fact]
-        public void FloatSerializer_ShouldSerializeAndDeserialize()
+        public void SingleSerializer_ShouldSerializeAndDeserialize()
         {
             // Arrange
             float original = 42.5f;
             byte[] buffer = new byte[sizeof(float)];
             int offset = 0;
-            var serializer = FloatSerializer.Instance;
+            var serializer = SingleSerializer.Instance;
 
             // Act
             serializer.Serialize(original, buffer, ref offset);
@@ -357,6 +357,8 @@ namespace YoloSerializer.Tests
             byte[] buffer = new byte[16];
             int offset = 0;
             var serializer = GuidSerializer.Instance;
+
+            var size = serializer.GetSize(original);
 
             // Act
             serializer.Serialize(original, buffer, ref offset);

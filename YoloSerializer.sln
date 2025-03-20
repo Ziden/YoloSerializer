@@ -18,6 +18,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "YoloSerializer.Generator", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExampleUsage", "ExampleUsage\ExampleUsage.csproj", "{D3F9FBE2-C19F-4210-BFD5-C9E2028238D4}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "YoloSerializer.Benchmarks", "YoloSerializer.Benchmarks\YoloSerializer.Benchmarks.csproj", "{FEC2652D-84A3-E00A-3F2E-4F5F95C64323}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -40,6 +42,10 @@ Global
 		{D3F9FBE2-C19F-4210-BFD5-C9E2028238D4}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D3F9FBE2-C19F-4210-BFD5-C9E2028238D4}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D3F9FBE2-C19F-4210-BFD5-C9E2028238D4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FEC2652D-84A3-E00A-3F2E-4F5F95C64323}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FEC2652D-84A3-E00A-3F2E-4F5F95C64323}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FEC2652D-84A3-E00A-3F2E-4F5F95C64323}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FEC2652D-84A3-E00A-3F2E-4F5F95C64323}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

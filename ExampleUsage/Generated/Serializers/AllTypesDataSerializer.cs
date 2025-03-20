@@ -54,7 +54,7 @@ namespace YoloSerializer.Core.Serializers
             int size = 0;
             size += Int32Serializer.Instance.GetSize(allTypesData.Int32Value);
                         size += Int64Serializer.Instance.GetSize(allTypesData.Int64Value);
-                        size += FloatSerializer.Instance.GetSize(allTypesData.FloatValue);
+                        size += SingleSerializer.Instance.GetSize(allTypesData.FloatValue);
                         size += DoubleSerializer.Instance.GetSize(allTypesData.DoubleValue);
                         size += BooleanSerializer.Instance.GetSize(allTypesData.BoolValue);
                         size += StringSerializer.Instance.GetSize(allTypesData.StringValue);
@@ -86,7 +86,7 @@ namespace YoloSerializer.Core.Serializers
 
             Int32Serializer.Instance.Serialize(allTypesData.Int32Value, buffer, ref offset);
                         Int64Serializer.Instance.Serialize(allTypesData.Int64Value, buffer, ref offset);
-                        FloatSerializer.Instance.Serialize(allTypesData.FloatValue, buffer, ref offset);
+                        SingleSerializer.Instance.Serialize(allTypesData.FloatValue, buffer, ref offset);
                         DoubleSerializer.Instance.Serialize(allTypesData.DoubleValue, buffer, ref offset);
                         BooleanSerializer.Instance.Serialize(allTypesData.BoolValue, buffer, ref offset);
                         StringSerializer.Instance.Serialize(allTypesData.StringValue, buffer, ref offset);
@@ -119,7 +119,7 @@ namespace YoloSerializer.Core.Serializers
                         allTypesData.Int32Value = _local_int32Value;
                         Int64Serializer.Instance.Deserialize(out long _local_int64Value, buffer, ref offset);
                         allTypesData.Int64Value = _local_int64Value;
-                        FloatSerializer.Instance.Deserialize(out float _local_floatValue, buffer, ref offset);
+                        SingleSerializer.Instance.Deserialize(out float _local_floatValue, buffer, ref offset);
                         allTypesData.FloatValue = _local_floatValue;
                         DoubleSerializer.Instance.Deserialize(out double _local_doubleValue, buffer, ref offset);
                         allTypesData.DoubleValue = _local_doubleValue;

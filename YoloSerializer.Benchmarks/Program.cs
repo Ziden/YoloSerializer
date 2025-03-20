@@ -4,10 +4,12 @@ using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Running;
 using YoloSerializer.Core.Serializers;
 using System.Collections.Generic;
+using YoloSerializer.Benchmarks.CodeGeneration;
+using System.Diagnostics;
 
 namespace YoloSerializer.Benchmarks
 {
-    [SimpleJob(RuntimeMoniker.Net70, launchCount: 1, warmupCount: 2, iterationCount: 3)]
+    [SimpleJob(RuntimeMoniker.Net80, launchCount: 1, warmupCount: 2, iterationCount: 3)]
     [MemoryDiagnoser(false)]
     public class SerializerBenchmarks
     {
@@ -75,16 +77,129 @@ namespace YoloSerializer.Benchmarks
 
     public class Program
     {
-        public static void Main(string[] args)
+        static void Main(string[] args)
         {
-            var config = ManualConfig.Create(DefaultConfig.Instance)
-                .WithOptions(ConfigOptions.DisableOptimizationsValidator);
+            try
+            {
+                if (args.Contains("--quick-test"))
+                {
+                    Console.WriteLine("Running quick comparison test between Yolo and MessagePack...");
+                    RunQuickComparisonTest();
+                    return;
+                }
+
+                // Ensure serializers are generated for benchmark models
+                Console.WriteLine("Generating serializers for benchmark models...");
+                SerializerGenerator.GenerateSerializers();
+
+                if (args.Contains("--list-only"))
+                {
+                    BenchmarkRunner.Run<SerializerBenchmarks>();
+                }
+                else if (args.Contains("--yolo-vs-msgpack"))
+                {
+                    BenchmarkRunner.Run<YoloVsMessagePackBenchmark>();
+                }
+                else
+                {
+                    BenchmarkRunner.Run<SerializerBenchmarks>();
+                    BenchmarkRunner.Run<YoloVsMessagePackBenchmark>();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+                if (ex.InnerException != null)
+                {
+                    Console.WriteLine($"Inner exception: {ex.InnerException.Message}");
+                }
+            }
+        }
+
+        static void RunQuickComparisonTest()
+        {
+            // Create benchmark instance
+            var benchmark = new YoloVsMessagePackBenchmark();
+            benchmark.ItemCount = 10;
+            benchmark.Setup();
             
-            Console.WriteLine("=== Running List Serializer Benchmarks ===");
-            BenchmarkRunner.Run<SerializerBenchmarks>(config);
+            // Simple data
+            Console.WriteLine("===== SIMPLE DATA =====");
             
-            Console.WriteLine("\n=== Running Dictionary Serializer Benchmarks ===");
-           
+            // Yolo serialization performance
+            var sw = Stopwatch.StartNew();
+            for (int i = 0; i < 10000; i++)
+            {
+                benchmark.YoloSimpleSerialize();
+            }
+            sw.Stop();
+            Console.WriteLine($"Yolo serialization: {sw.ElapsedMilliseconds}ms for 10,000 iterations");
+            
+            // MessagePack serialization performance
+            sw = Stopwatch.StartNew();
+            for (int i = 0; i < 10000; i++)
+            {
+                benchmark.MessagePackSimpleSerialize();
+            }
+            sw.Stop();
+            Console.WriteLine($"MessagePack serialization: {sw.ElapsedMilliseconds}ms for 10,000 iterations");
+            
+            // Yolo deserialization performance
+            sw = Stopwatch.StartNew();
+            for (int i = 0; i < 10000; i++)
+            {
+                benchmark.YoloSimpleDeserialize();
+            }
+            sw.Stop();
+            Console.WriteLine($"Yolo deserialization: {sw.ElapsedMilliseconds}ms for 10,000 iterations");
+            
+            // MessagePack deserialization performance
+            sw = Stopwatch.StartNew();
+            for (int i = 0; i < 10000; i++)
+            {
+                benchmark.MessagePackSimpleDeserialize();
+            }
+            sw.Stop();
+            Console.WriteLine($"MessagePack deserialization: {sw.ElapsedMilliseconds}ms for 10,000 iterations");
+            
+            // Complex data
+            Console.WriteLine("\n===== COMPLEX DATA =====");
+            
+            // Yolo serialization performance
+            sw = Stopwatch.StartNew();
+            for (int i = 0; i < 1000; i++)
+            {
+                benchmark.YoloComplexSerialize();
+            }
+            sw.Stop();
+            Console.WriteLine($"Yolo serialization: {sw.ElapsedMilliseconds}ms for 1,000 iterations");
+            
+            // MessagePack serialization performance
+            sw = Stopwatch.StartNew();
+            for (int i = 0; i < 1000; i++)
+            {
+                benchmark.MessagePackComplexSerialize();
+            }
+            sw.Stop();
+            Console.WriteLine($"MessagePack serialization: {sw.ElapsedMilliseconds}ms for 1,000 iterations");
+            
+            // Yolo deserialization performance
+            sw = Stopwatch.StartNew();
+            for (int i = 0; i < 1000; i++)
+            {
+                benchmark.YoloComplexDeserialize();
+            }
+            sw.Stop();
+            Console.WriteLine($"Yolo deserialization: {sw.ElapsedMilliseconds}ms for 1,000 iterations");
+            
+            // MessagePack deserialization performance
+            sw = Stopwatch.StartNew();
+            for (int i = 0; i < 1000; i++)
+            {
+                benchmark.MessagePackComplexDeserialize();
+            }
+            sw.Stop();
+            Console.WriteLine($"MessagePack deserialization: {sw.ElapsedMilliseconds}ms for 1,000 iterations");
         }
     }
 }
