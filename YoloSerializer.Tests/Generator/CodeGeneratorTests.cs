@@ -213,5 +213,102 @@ namespace YoloSerializer.Tests.Generator
             Assert.Contains("public int GetSerializedSize<T>", content);
             Assert.Contains("public object? DeserializeById", content);
         }
+
+        [Fact]
+        public async Task GenerateSerializersFromTypeNames_GeneratesCorrectSerializers()
+        {
+            // Arrange
+            var assemblyPath = typeof(Person).Assembly.Location;
+            var typeNames = new[] 
+            { 
+                typeof(Person).FullName, 
+                typeof(Address).FullName 
+            };
+            var config = new GeneratorConfig { OutputPath = _testOutputPath, ForceRegeneration = true };
+
+            // Act
+            var processedTypes = await _generator.GenerateSerializersFromTypeNames(assemblyPath, typeNames, config);
+
+            // Assert
+            Assert.Equal(2, processedTypes.Count);
+            Assert.Contains(processedTypes, t => t.Name == "Person");
+            Assert.Contains(processedTypes, t => t.Name == "Address");
+            
+            // Verify files were generated
+            var serializersPath = Path.Combine(_testOutputPath, "Serializers");
+            Assert.True(File.Exists(Path.Combine(serializersPath, "PersonSerializer.cs")));
+            Assert.True(File.Exists(Path.Combine(serializersPath, "AddressSerializer.cs")));
+        }
+
+        [Fact]
+        public async Task GenerateSerializersFromTypeNames_ThrowsException_WhenAssemblyNotFound()
+        {
+            // Arrange
+            var nonExistentAssemblyPath = Path.Combine(_testOutputPath, "NonExistentAssembly.dll");
+            var typeNames = new[] { "NonExistentType" };
+            var config = new GeneratorConfig { OutputPath = _testOutputPath, ForceRegeneration = true };
+
+            // Act & Assert
+            await Assert.ThrowsAsync<FileNotFoundException>(() =>
+                _generator.GenerateSerializersFromTypeNames(nonExistentAssemblyPath, typeNames, config));
+        }
+
+        [Fact]
+        public async Task GenerateSerializersFromTypeNames_ThrowsException_WhenTypesNotFound()
+        {
+            // Arrange
+            var assemblyPath = typeof(Person).Assembly.Location;
+            var typeNames = new[] { "NonExistentType", typeof(Person).FullName };
+            var config = new GeneratorConfig { OutputPath = _testOutputPath, ForceRegeneration = true };
+
+            // Act & Assert
+            var exception = await Assert.ThrowsAsync<ArgumentException>(() =>
+                _generator.GenerateSerializersFromTypeNames(assemblyPath, typeNames, config));
+            
+            Assert.Contains("NonExistentType", exception.Message);
+            Assert.DoesNotContain(typeof(Person).FullName, exception.Message);
+        }
+
+        [Fact]
+        public async Task ScanAssemblyForSerializableTypes_HandlesEmptyResults()
+        {
+            // Arrange
+            var assemblyPath = typeof(Person).Assembly.Location;
+            var config = new GeneratorConfig { OutputPath = _testOutputPath, ForceRegeneration = true };
+            
+            // Filter that won't match any types
+            Func<Type, bool> filter = type => type.Name == "NonExistentTypeName";
+
+            // Act
+            var processedTypes = await _generator.ScanAssemblyForSerializableTypes(
+                assemblyPath, 
+                filter,
+                null, 
+                config);
+
+            // Assert
+            Assert.Empty(processedTypes);
+        }
+
+        [Fact]
+        public async Task ScanAssemblyForSerializableTypes_RespectsNamespaceFilter()
+        {
+            // Arrange
+            var assemblyPath = typeof(Person).Assembly.Location;
+            var config = new GeneratorConfig { OutputPath = _testOutputPath, ForceRegeneration = true };
+            
+            // Namespace that doesn't exist in the test assembly
+            string[] namespaceFilter = new[] { "NonExistentNamespace" };
+
+            // Act
+            var processedTypes = await _generator.ScanAssemblyForSerializableTypes(
+                assemblyPath, 
+                null,
+                namespaceFilter, 
+                config);
+
+            // Assert
+            Assert.Empty(processedTypes);
+        }
     }
 } 

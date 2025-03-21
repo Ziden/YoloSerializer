@@ -113,6 +113,116 @@ namespace YoloSerializer.Generator
             await GenerateConfiguration(serializableTypes, corePath, config.ForceRegeneration);
         }
 
+        /// <summary>
+        /// Generates serializers for types from an assembly by their type names.
+        /// </summary>
+        /// <param name="assemblyPath">The path to the assembly file.</param>
+        /// <param name="typeNames">Array of fully qualified type names to generate serializers for.</param>
+        /// <param name="config">Generator configuration options.</param>
+        /// <returns>A list of types that were successfully processed.</returns>
+        /// <exception cref="FileNotFoundException">Thrown when the assembly file is not found.</exception>
+        /// <exception cref="ArgumentException">Thrown when a type name cannot be found in the assembly.</exception>
+        public async Task<List<Type>> GenerateSerializersFromTypeNames(string assemblyPath, string[] typeNames, GeneratorConfig config)
+        {
+            if (!File.Exists(assemblyPath))
+            {
+                throw new FileNotFoundException($"Assembly not found at path: {assemblyPath}");
+            }
+
+            // Load the assembly from the specified path
+            Assembly assembly = Assembly.LoadFrom(assemblyPath);
+            
+            // Find all the requested types in the assembly
+            List<Type> serializableTypes = new List<Type>();
+            List<string> notFoundTypes = new List<string>();
+            
+            foreach (string typeName in typeNames)
+            {
+                Type? type = assembly.GetType(typeName);
+                if (type != null)
+                {
+                    serializableTypes.Add(type);
+                }
+                else
+                {
+                    notFoundTypes.Add(typeName);
+                }
+            }
+
+            // Check if all types were found
+            if (notFoundTypes.Count > 0)
+            {
+                throw new ArgumentException($"The following types could not be found in assembly {assembly.GetName().Name}: {string.Join(", ", notFoundTypes)}");
+            }
+
+            // Generate serializers for the found types
+            await GenerateSerializers(serializableTypes, config);
+            
+            return serializableTypes;
+        }
+
+        /// <summary>
+        /// Scans an assembly and generates serializers for types matching the specified filter.
+        /// </summary>
+        /// <param name="assemblyPath">The path to the assembly file.</param>
+        /// <param name="filter">A predicate to determine which types to include. If null, all public non-abstract classes will be included.</param>
+        /// <param name="namespaceFilter">Optional namespace filter. If provided, only types in these namespaces will be considered.</param>
+        /// <param name="config">Generator configuration options.</param>
+        /// <returns>A list of types that were processed.</returns>
+        /// <exception cref="FileNotFoundException">Thrown when the assembly file is not found.</exception>
+        public async Task<List<Type>> ScanAssemblyForSerializableTypes(
+            string assemblyPath, 
+            Func<Type, bool>? filter = null, 
+            string[]? namespaceFilter = null, 
+            GeneratorConfig? config = null)
+        {
+            if (!File.Exists(assemblyPath))
+            {
+                throw new FileNotFoundException($"Assembly not found at path: {assemblyPath}");
+            }
+
+            // Use the provided config or create a default one
+            config ??= new GeneratorConfig 
+            { 
+                OutputPath = Path.Combine(Path.GetDirectoryName(assemblyPath), "Generated"),
+                ForceRegeneration = true 
+            };
+
+            // Load the assembly from the specified path
+            Assembly assembly = Assembly.LoadFrom(assemblyPath);
+            
+            // Apply default filter if none provided (non-abstract public classes)
+            filter ??= (type => type.IsClass && !type.IsAbstract && type.IsPublic);
+            
+            // Get all types from the assembly
+            List<Type> allTypes = assembly.GetTypes().ToList();
+            
+            // Filter types based on namespace if filter provided
+            if (namespaceFilter != null && namespaceFilter.Length > 0)
+            {
+                allTypes = allTypes.Where(t => 
+                    t.Namespace != null && 
+                    namespaceFilter.Any(ns => t.Namespace.StartsWith(ns)))
+                    .ToList();
+            }
+            
+            // Apply the type filter
+            List<Type> serializableTypes = allTypes.Where(filter).ToList();
+            
+            if (serializableTypes.Count == 0)
+            {
+                Console.WriteLine($"Warning: No serializable types found in assembly {assembly.GetName().Name}");
+                return serializableTypes;
+            }
+            
+            Console.WriteLine($"Found {serializableTypes.Count} serializable types in assembly {assembly.GetName().Name}");
+            
+            // Generate serializers for the found types
+            await GenerateSerializers(serializableTypes, config);
+            
+            return serializableTypes;
+        }
+
         internal async Task GenerateSerializer(Type type, Template template, string outputPath, bool forceRegeneration)
         {
             string outputFile = Path.Combine(outputPath, $"{type.Name}Serializer.cs");

@@ -141,7 +141,7 @@ namespace YoloSerializer.Tests
 
             // Get size and create buffer
             int size = serializer.GetSize(original);
-            byte[] buffer = new byte[size];
+            var buffer = new byte[size];
             int offset = 0;
 
             // Act
